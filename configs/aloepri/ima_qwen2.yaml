@@ -1,0 +1,23 @@
+name: aloepri_ima_qwen2
+mode: full
+seed: 0
+paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (IMA), Section 7.2 Table 2"}
+attack:
+  name: ima.qwen2_aloepri
+  variant: aloepri
+  params: {objective: ce, epochs: 10, lr: 0.0003}
+inverter:
+  backbone: Qwen2
+  num_decoder_layers: 2          # FIXED by the paper
+  num_attention_heads: 8         # FIXED by the paper
+  inverts: "obfuscated embeddings -> plaintext token embeddings or token indices"
+training:
+  data: "public training dataset, obfuscated with the known AloePri mechanism (train/test isolated)"
+  loss: cross_entropy            # token-index path; MSE is an optional, non-claimed alternative
+models: [Qwen2.5-14B-Instruct]
+metrics: {report: [ttrsr, cosine_similarity], ks: [1, 5, 10]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [IMA-CE-1]
+resource_requirement: "Requires AloePri-obfuscated embeddings of the target LLM and a public corpus to train the 2-layer/8-head Qwen2 inverter at scale."
+notes: "The inverter is asserted to be exactly 2 decoder layers / 8 attention heads; data isolation enforced."

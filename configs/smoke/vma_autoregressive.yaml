@@ -1,0 +1,11 @@
+name: smoke_vma_autoregressive
+mode: smoke
+seed: 0
+attack:
+  name: vma.autoregressive
+  params: {}
+scenario:
+  name: vma_autoregressive
+  params: {vocab: 16, d: 8, n: 5, layers: 2}
+metrics: {ks: [1, 5, 10]}
+notes: Causal prefix L1 recovery smoke test (original Hidden No More VMA).

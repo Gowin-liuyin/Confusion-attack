@@ -1,0 +1,24 @@
+name: aloepri_sda
+mode: full
+seed: 0
+paper: {title: "AloePri", id: 2603.01499v2, section: "Section 7.6, Appendix D.1 (SDA)"}
+# AloePri CITES Aldarrab & May (2021) but its appendix DESCRIBES a recurrence
+# encoding + Transformer causal LM, which matches Kambhatla et al. (2023). We
+# therefore run the 2023 recurrence+CLM method for the AloePri adaptation and
+# record the citation/appendix version mismatch in docs/DEVIATIONS.md.
+attack:
+  name: sda.sda2023
+  variant: original_2023
+  params: {epochs: 20, beam_width: 100, num_train: 100000, homophonic: false}
+version_note:
+  cited: "Aldarrab & May 2021 (frequency-rank + encoder-decoder)"
+  appendix_describes: "recurrence encoding + causal Transformer LM (Kambhatla et al. 2023)"
+  chosen: "2023 recurrence+CLM (matches the appendix algorithm description)"
+knowledge_settings: [zero_knowledge, domain_aware, distribution_aware]
+dataset: {public: CCI3/MedDialog/Huatuo26M-Lite, private: Huatuo26M-Lite}
+metrics: {report: [bleu4], ks: [1]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [SDA-2023-ENC, SDA-2023-OBJ]
+resource_requirement: "Requires the medical/public corpora and transformer training at paper scale."
+notes: "AloePri reports BLEU-4 ~2 (insufficient to form meaningful text). Version mixing documented in DEVIATIONS.md."

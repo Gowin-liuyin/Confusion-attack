@@ -1,0 +1,38 @@
+name: original_ia_ednn
+mode: full
+seed: 0
+paper:
+  title: "An Inversion Attack Against Obfuscated Embedding Matrix in Language Model Inference"
+  authors: "Lin et al., EMNLP 2024"
+  id: 2024.emnlp-main.126
+  section: "EDNN (Element-wise Differential Nearest Neighbour)"
+attack:
+  name: ia.ednn
+  variant: original
+  params: {top_k: 10}
+models:
+  - description: "language-model embedding matrix obfuscated by a glide reflection (l = 1*a, t = 1*b)"
+dataset:
+  description: "observed obfuscated embeddings + a reference embedding dictionary"
+metrics:
+  report: [top1_asr, ttrsr]
+  ks: [1, 5, 10]
+fidelity:
+  approximations:
+    sampling: false
+    truncation: false
+    quantization: false
+    low_precision: false
+    pruning: false
+    early_stopping: false
+    candidate_truncation: false
+    approx_nearest_neighbor: false
+formula_refs: [IA-EDNN-1, IA-EDNN-2, IA-EDNN-3]
+resource_requirement: >-
+  Requires the obfuscated embedding matrix and a reference dictionary at the
+  target model's hidden size; tractable in principle but the target model's
+  obfuscated weights are not available here.
+notes: >-
+  Faithful EDNN: the circular-left-shift (never drop the last coordinate)
+  difference representation and the all-equal-coordinate glide invariant are
+  implemented and verified, including a counterexample for a general reflection.

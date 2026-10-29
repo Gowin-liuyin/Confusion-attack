@@ -1,0 +1,17 @@
+name: aloepri_nn
+mode: full
+seed: 0
+paper: {title: "Towards Privacy-Preserving LLM Inference via Covariant Obfuscation (AloePri)", id: 2603.01499v2, section: "Section 7.2, Table 2 (NN baseline)"}
+attack: {name: nn_knn.euclidean, variant: original, params: {top_k: 10}}
+models: [Qwen2.5-14B-Instruct]
+defense:
+  method: AloePri covariant obfuscation
+  generation: {temperature: 0.65, top_k: 20, top_p: 0.95, max_seq_len: 8192, dtype: bfloat16}
+  privacy: {lambda: 0.3, expansion_h: 128, alpha_e: 1.0, alpha_h: 0.2, beta: 8, gamma: 1.0e-3}
+dataset: {description: "private input texts; TTRSR / CosSim over recovered tokens"}
+metrics: {report: [ttrsr, cosine_similarity], ks: [1, 5, 10]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [NN-1, METRIC-TTRSR]
+resource_requirement: "Requires Qwen2.5-14B-Instruct obfuscated with AloePri and GPU memory not available on the 8 GB local card. dtype bfloat16 is the DEFENSE's setting, not an attack-side approximation."
+notes: "NN direct geometric retrieval against AloePri-obfuscated embeddings (paper reports ~0% TTRSR)."

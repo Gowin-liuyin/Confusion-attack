@@ -1,0 +1,11 @@
+name: smoke_vma_osnip
+mode: smoke
+seed: 0
+attack:
+  name: vma.osnip_projection
+  params: {top_k: 10}
+scenario:
+  name: vma_osnip
+  params: {vocab: 50, d: 12, n: 10, noise: 0.02}
+metrics: {ks: [1, 5, 10]}
+notes: OSNIP projection L1 matching smoke test with Total/Clean ASR split.

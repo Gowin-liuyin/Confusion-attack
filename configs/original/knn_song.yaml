@@ -1,0 +1,40 @@
+name: original_knn_song
+mode: full
+seed: 0
+paper:
+  title: "Information Leakage in Embedding Models"
+  authors: "Song & Raghunathan, CCS 2020"
+  id: arXiv:2004.00053
+  section: "Nearest-neighbour / white-box inversion"
+attack:
+  name: nn_knn.euclidean
+  variant: original
+  params: {top_k: 10}
+  also_run: [nn_knn.cosine]
+models:
+  - description: "embedding model Phi mapping inputs to low-dimensional vectors"
+dataset:
+  description: "held-out text whose embeddings are observed by the adversary"
+metrics:
+  report: [top1_asr, top5_asr, top10_asr]
+  ks: [1, 5, 10]
+fidelity:
+  approximations:
+    sampling: false
+    truncation: false
+    quantization: false
+    low_precision: false
+    pruning: false
+    early_stopping: false
+    candidate_truncation: false
+    approx_nearest_neighbor: false
+formula_refs: [NN-1, NN-2, NN-3, METRIC-ASR]
+resource_requirement: >-
+  Requires the target embedding model and a reference vocabulary embedding
+  matrix. The original paper also covers a white-box continuous-relaxation
+  optimisation (NN-3) that needs the full model + gradient access.
+notes: >-
+  Original KNN lineage. The simple nearest-neighbour retrieval is fully
+  implemented and verified; the broader white-box optimisation (softmax
+  continuous relaxation, NN-3) is documented in the ledger as the paper's
+  extended objective.

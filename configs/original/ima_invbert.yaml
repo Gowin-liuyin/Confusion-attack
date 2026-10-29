@@ -1,0 +1,41 @@
+name: original_ima_invbert
+mode: full
+seed: 0
+paper:
+  title: "InvBERT: Reconstructing Text from Contextualized Word Embeddings by Inverting the BERT Pipeline"
+  authors: "Kugler et al."
+  id: arXiv:2109.10104
+  section: "Section 3.1 (WB/GB/BB), Section 4.2 (Classify / Seq2Seq)"
+attack:
+  runs:
+    - {name: ima.classify, variant: original, params: {knowledge: GB, epochs: 50, lr: 0.0001}}
+    - {name: ima.seq2seq, variant: original, params: {epochs: 50, lr: 0.0001}}
+knowledge_settings: [WB, GB, BB]   # white / gray / black box
+models:
+  - BERT (contextualized word embeddings; invert the BERT pipeline)
+dataset:
+  source: "AO3 fan-fiction corpus (public); strict train/test isolation"
+hyperparameters:
+  optimizer: AdamW
+  loss: cross_entropy
+metrics:
+  report: [token_accuracy, exact_match, token_f1]
+  ks: [1]
+fidelity:
+  approximations:
+    sampling: false
+    truncation: false
+    quantization: false
+    low_precision: false
+    pruning: false
+    early_stopping: false
+    candidate_truncation: false
+    approx_nearest_neighbor: false
+formula_refs: [IMA-CE-1, IMA-CLS-1, IMA-S2S-1]
+resource_requirement: >-
+  Requires the full BERT encoder and a large public corpus to train the
+  inverters. The architecture and losses are implemented; training at paper
+  scale is not run on the local GPU.
+notes: >-
+  Data isolation enforced: the evaluated text is never in the inverter's
+  training corpus (asserted in regression tests).

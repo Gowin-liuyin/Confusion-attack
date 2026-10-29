@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obfuscation-attacks"
+version = "0.1.0"
+description = "Faithful reproduction of seven obfuscation/inversion attacks from the AloePri and OSNIP papers"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Confusion-attack reproduction" }]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Neural attacks (VMA autoregressive, ISA, IMA, SDA neural models) need a model backend.
+neural = [
+    "torch>=2.1",
+    "transformers>=4.40",
+]
+# Reference corpora / stop-word lists used by full-scale experiments.
+data = [
+    "nltk>=3.8",
+    "datasets>=2.18",
+]
+dev = [
+    "pytest>=7.4",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: isolated unit tests for a single function or class",
+    "mathematical: tests that pin a paper formula/invariant to code",
+    "regression: end-to-end per-attack correctness tests",
+    "integration: cross-module and runner/pipeline tests",
+    "neural: tests that require the optional torch/transformers backend",
+    "slow: tests that take more than a few seconds",
+]
+filterwarnings = ["ignore::DeprecationWarning"]

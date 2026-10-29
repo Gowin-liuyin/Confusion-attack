@@ -1,0 +1,47 @@
+name: original_vma_hidden_no_more
+mode: full
+seed: 0
+paper:
+  title: "Hidden No More: Attacking and Defending Private Third-Party LLM Inference"
+  authors: "Thomas et al., ICML 2025"
+  id: arXiv:2505.18332
+  section: "Section 5 (vocabulary-matching), Algorithms 1-5, Appendix D (epsilon thresholds)"
+attack:
+  name: vma.autoregressive
+  variant: original
+  params:
+    epsilon: null          # per-layer L1 threshold (paper Appendix D); null => pure argmin
+    sorted_l1: false        # set true for hidden-dim / factorized-2D permutation
+models:
+  - Gemma-2-2B-IT
+  - Llama-3.1-8B-Instruct
+permutation_types:          # paper evaluates these defence permutations
+  - none
+  - sequence_dimension      # permutation of the N rows (space N!)
+  - hidden_dimension        # permutation of the d columns -> use sorted-L1 (space d!)
+  - factorized_2d           # rows + columns (space N!(d!)^N)
+proposal_model: "ordered vocabulary from a proposal model P(x) (argsort)"
+hyperparameters:
+  l1_threshold_epsilon: "per-layer optimal thresholds, Appendix D Tables 9-12"
+metrics:
+  report: [exact_decode_rate, token_ttrsr]
+  ks: [1]
+fidelity:
+  approximations:
+    sampling: false
+    truncation: false        # the paper truncates eval prompts for compute; we keep full length
+    quantization: false
+    low_precision: false
+    pruning: false
+    early_stopping: false    # epsilon early-accept is the paper's own rule, modelled exactly
+    candidate_truncation: false
+    approx_nearest_neighbor: false
+formula_refs: [VMA-B1-1, VMA-B1-2, METRIC-TTRSR]
+resource_requirement: >-
+  Requires Gemma-2-2B-IT / Llama-3.1-8B-Instruct with per-position hidden-state
+  replay over the whole vocabulary per token per position. Replaying |V|*N
+  forward passes for 8B models is infeasible on the local 8 GB GPU.
+notes: >-
+  Faithful original autoregressive VMA. The epsilon early-accept rule and the
+  sorted-L1 matcher for hidden-dim permutation are implemented; the causal
+  prefix recovery and sorted-L1 invariance are verified on the toy causal model.

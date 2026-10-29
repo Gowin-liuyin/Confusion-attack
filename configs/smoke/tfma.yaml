@@ -1,0 +1,11 @@
+name: smoke_tfma
+mode: smoke
+seed: 0
+attack:
+  name: tfma.independent
+  params: {top_k: 100}
+scenario:
+  name: tfma
+  params: {vocab: 30, length: 4000, ref_length: 20000}
+metrics: {ks: [1, 10, 100]}
+notes: Independent nearest-frequency matching smoke test (AloePri TFMA).

@@ -49,6 +49,11 @@ class ObfuscationScheme(ABC):
 
 
 def _safe_descriptor(sample: AttackSample) -> dict:
+    # NOTE: content_mask is deliberately NOT exposed here. It marks content vs
+    # stop-word positions and is derived from the plaintext token ids, so it is
+    # ground-truth-adjacent; only the scorer (which holds the sample) may read
+    # it, for the Clean-ASR split. special_token_mask IS exposed: BOS/EOS/pad
+    # positions are structural and an attacker legitimately knows them.
     return {
         "tokenizer_id": sample.tokenizer_id,
         "model_id": sample.model_id,
@@ -60,7 +65,6 @@ def _safe_descriptor(sample: AttackSample) -> dict:
         "text_source": sample.text_source,
         "data_split": sample.data_split,
         "special_token_mask": sample.special_token_mask,
-        "content_mask": sample.content_mask,
     }
 
 

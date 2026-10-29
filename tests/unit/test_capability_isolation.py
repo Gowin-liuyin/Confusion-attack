@@ -63,3 +63,29 @@ def test_context_has_no_ground_truth_fields():
     ctx = _embeddings_only_ctx()
     for leaky in ("plaintext_token_ids", "secret_permutation", "secret_matrices"):
         assert not hasattr(ctx, leaky)
+
+
+def test_build_context_descriptor_excludes_content_mask():
+    """content_mask is derived from the true tokens -> it must not reach the attack.
+
+    The Clean-ASR split still works because the scorer reads the mask from the
+    sample directly. special_token_mask (structural: BOS/EOS/pad) stays exposed.
+    """
+    import numpy as np
+
+    from obfuscation_attacks.data.contracts import AttackSample
+    from obfuscation_attacks.schemes.base import build_context
+    from obfuscation_attacks.schemes.generic import GenericScheme
+
+    sample = AttackSample(
+        tokenizer_id="toy", model_id="toy", seq_len=3, vocab_size=5,
+        obfuscated_embeddings=np.zeros((3, 4)),
+        reference_embeddings=np.zeros((5, 4)),
+        plaintext_token_ids=np.array([0, 1, 2]),
+        special_token_mask=np.array([True, False, False]),
+        content_mask=np.array([False, True, True]),
+    )
+    scheme = GenericScheme("t", frozenset({Capability.EMBEDDINGS}))
+    ctx = build_context(scheme, sample)
+    assert "content_mask" not in ctx.descriptor          # ground-truth-derived: withheld
+    assert "special_token_mask" in ctx.descriptor        # structural: exposed

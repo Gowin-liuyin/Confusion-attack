@@ -1,0 +1,92 @@
+{
+  "nn_embedding_euclidean": {
+    "asr@1": 1.0,
+    "asr@5": 1.0,
+    "ttrsr": 1.0
+  },
+  "nn_embedding_cosine": {
+    "asr@1": 1.0,
+    "asr@5": 1.0,
+    "ttrsr": 1.0
+  },
+  "nn_hidden_layer_sweep": {
+    "0": {
+      "asr@1": 1.0,
+      "asr@5": 1.0
+    },
+    "1": {
+      "asr@1": 1.0,
+      "asr@5": 1.0
+    },
+    "2": {
+      "asr@1": 1.0,
+      "asr@5": 1.0
+    },
+    "4": {
+      "asr@1": 0.375,
+      "asr@5": 0.75
+    },
+    "8": {
+      "asr@1": 0.0,
+      "asr@5": 0.1875
+    },
+    "12": {
+      "asr@1": 0.0,
+      "asr@5": 0.125
+    },
+    "16": {
+      "asr@1": 0.0,
+      "asr@5": 0.0
+    }
+  },
+  "ia_ednn_real": {
+    "asr@1": 1.0,
+    "ttrsr": 1.0
+  },
+  "ia_gate_real": {
+    "num_observed_symbols": 64,
+    "mapping_top1_accuracy": 1.0,
+    "mapping_asr@1": 1.0,
+    "mapping_asr@5": 1.0,
+    "mapping_asr@10": 1.0
+  },
+  "ia_attn_real": {
+    "num_observed_symbols": 64,
+    "mapping_top1_accuracy": 1.0,
+    "mapping_asr@1": 1.0,
+    "mapping_asr@5": 1.0,
+    "mapping_asr@10": 1.0
+  },
+  "tfma_real_text": {
+    "num_observed_symbols": 1269,
+    "mapping_top1_accuracy": 0.002364066193853428,
+    "mapping_asr@1": 0.002364066193853428,
+    "mapping_asr@10": 0.014184397163120567,
+    "mapping_asr@100": 0.06304176516942474
+  },
+  "vma_replay": {
+    "candidate_pool_K": 96,
+    "positions": 8,
+    "layer_sweep_asr1": {
+      "1": 1.0,
+      "2": 1.0,
+      "4": 1.0,
+      "8": 1.0,
+      "12": 1.0,
+      "16": 1.0
+    },
+    "main_layer": 8,
+    "ttrsr": 1.0,
+    "original": "The quick brown fox jumps over the lazy",
+    "recovered": "The quick brown fox jumps over the lazy",
+    "note": "candidate-restricted (CPU, 128k vocab); L1 matching rule from the real attack"
+  },
+  "isa_er": {
+    "layer": 2,
+    "steps": 300,
+    "ttrsr": 0.6,
+    "asr@5": 0.8,
+    "final_state_distance": 0.04445646330714226,
+    "note": "budget-limited (paper uses ~5e4 steps)"
+  }
+}

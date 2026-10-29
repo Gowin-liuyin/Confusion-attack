@@ -204,3 +204,98 @@ def total_and_clean_asr(
         exclude = ~content
     clean = asr_at_k(candidates, truth, k, special_mask=exclude)
     return total, clean
+
+
+# ---------------------------------------------------------------------------
+# Additional paper metrics (SDA: SER; AloePri: CosSim, BLEU-4)
+# ---------------------------------------------------------------------------
+def symbol_error_rate(
+    pred_ids: Sequence[int],
+    truth_ids: Sequence[int],
+    *,
+    special_mask: Optional[Sequence[bool]] = None,
+) -> float:
+    """Symbol Error Rate (SDA 2021/2023): fraction of positions decoded wrong.
+
+    Positional and length-aware: a position counts as an error when the
+    prediction is missing (shorter output) or differs from the truth. With equal
+    lengths ``SER == 1 - ttrsr``. Special positions are excluded before counting.
+    """
+    truth = list(truth_ids)
+    pred = list(pred_ids)
+    positions = _counted_positions(len(truth), special_mask)
+    if positions.size == 0:
+        return 0.0
+    errors = 0
+    for i in positions:
+        if i >= len(pred) or pred[i] != truth[i]:
+            errors += 1
+    return errors / positions.size
+
+
+def recovered_cosine_similarity(
+    pred_ids: Sequence[int],
+    truth_ids: Sequence[int],
+    embeddings: np.ndarray,
+    *,
+    special_mask: Optional[Sequence[bool]] = None,
+) -> float:
+    """Mean per-position cosine between recovered and true token embeddings.
+
+    A token-level proxy for AloePri's Recovered-Text Cosine Similarity (CosSim).
+    It is NOT a sentence-encoder similarity (recorded in docs/DEVIATIONS.md); it
+    averages ``cos(E[pred_i], E[truth_i])`` over counted positions. A missing or
+    out-of-range prediction contributes 0.
+    """
+    E = np.asarray(embeddings, dtype=float)
+    vocab = E.shape[0]
+    truth = list(truth_ids)
+    pred = list(pred_ids)
+    positions = _counted_positions(len(truth), special_mask)
+    if positions.size == 0:
+        return 0.0
+    sims = []
+    for i in positions:
+        if i >= len(pred):
+            sims.append(0.0)
+            continue
+        ti, pi = int(truth[i]), int(pred[i])
+        if not (0 <= ti < vocab and 0 <= pi < vocab):
+            sims.append(0.0)
+            continue
+        a, b = E[ti], E[pi]
+        na, nb = np.linalg.norm(a), np.linalg.norm(b)
+        sims.append(float(a @ b / (na * nb)) if na > 0 and nb > 0 else 0.0)
+    return float(np.mean(sims)) if sims else 0.0
+
+
+def bleu4(pred_ids: Sequence[int], truth_ids: Sequence[int], *, max_n: int = 4) -> float:
+    """Token-level sentence BLEU-4 with brevity penalty (AloePri BLEU-4).
+
+    Computes clipped n-gram precisions for ``n = 1..max_n`` over integer token
+    ids, their geometric mean, and the standard brevity penalty. Order-sensitive
+    (n-grams); if any n-gram precision is 0 the score is 0 (no smoothing), as in
+    the unsmoothed corpus-free definition.
+    """
+    import math
+
+    pred = [int(t) for t in pred_ids]
+    ref = [int(t) for t in truth_ids]
+    if not pred or not ref:
+        return 0.0
+    precisions = []
+    for n in range(1, max_n + 1):
+        pred_ng = Counter(tuple(pred[i : i + n]) for i in range(len(pred) - n + 1))
+        ref_ng = Counter(tuple(ref[i : i + n]) for i in range(len(ref) - n + 1))
+        denom = sum(pred_ng.values())
+        if denom == 0:
+            precisions.append(0.0)
+            continue
+        overlap = sum(min(c, ref_ng.get(g, 0)) for g, c in pred_ng.items())
+        precisions.append(overlap / denom)
+    if min(precisions) <= 0.0:
+        geo = 0.0
+    else:
+        geo = math.exp(sum(math.log(p) for p in precisions) / len(precisions))
+    bp = 1.0 if len(pred) > len(ref) else math.exp(1.0 - len(ref) / max(1, len(pred)))
+    return float(bp * geo)

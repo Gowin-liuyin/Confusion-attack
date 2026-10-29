@@ -7,6 +7,9 @@ from .recovery import (
     exact_sequence_match,
     ttrsr,
     total_and_clean_asr,
+    symbol_error_rate,
+    recovered_cosine_similarity,
+    bleu4,
     PRF1,
 )
 
@@ -17,5 +20,8 @@ __all__ = [
     "exact_sequence_match",
     "ttrsr",
     "total_and_clean_asr",
+    "symbol_error_rate",
+    "recovered_cosine_similarity",
+    "bleu4",
     "PRF1",
 ]

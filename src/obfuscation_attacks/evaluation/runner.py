@@ -78,11 +78,24 @@ def run_scenario(
     }
 
 
-def _fidelity_record(config: dict, attack_desc: dict, scheme_desc: Optional[dict], status: str) -> dict:
+def _attack_specs(config: dict) -> list[tuple[str, dict]]:
+    """Resolve one or several attacks from a config.
+
+    A config may carry a single ``attack: {name, params}`` or a list
+    ``attack: {runs: [{name, params}, ...]}`` (e.g. the InvBERT / ISA full
+    configs that bundle two inverters). Returns ``[(name, params), ...]``.
+    """
+    spec = config["attack"]
+    if "runs" in spec:
+        return [(r["name"], dict(r.get("params", {}))) for r in spec["runs"]]
+    return [(spec["name"], dict(spec.get("params", {})))]
+
+
+def _fidelity_record(config: dict, attack_descs: list[dict], scheme_desc: Optional[dict], status: str) -> dict:
     fid = {
         "mode": config.get("mode"),
         "status": status,
-        "attack": attack_desc,
+        "attacks": attack_descs,
         "scheme": scheme_desc,
         "seed": config.get("seed"),
         # Declared fidelity flags: a faithful full run must assert these are all
@@ -116,12 +129,11 @@ def run_from_config(config: dict, reports_root: str | None = None) -> dict:
     mode = config.get("mode", "smoke")
     seed = int(config.get("seed", 0))
     ks = tuple(config.get("metrics", {}).get("ks", [1, 5, 10]))
-    attack_spec = config["attack"]
-    attack_name = attack_spec["name"]
-    attack_params = attack_spec.get("params", {})
+    specs = _attack_specs(config)
 
     load_all()
-    attack = get_attack(attack_name, **attack_params)
+    attacks = [get_attack(n, **p) for n, p in specs]
+    attack_descs = [a.describe() for a in attacks]
 
     paths = None
     if reports_root is not None:
@@ -130,13 +142,14 @@ def run_from_config(config: dict, reports_root: str | None = None) -> dict:
     if mode == "full":
         # Full paper-scale run: requires real models/datasets. This harness does
         # not ship those weights/data, and this machine cannot host them (see
-        # docs/RESOURCE_REQUIREMENTS.md). Report the blockage honestly.
+        # docs/RESOURCE_REQUIREMENTS.md). Report the blockage honestly for every
+        # bundled attack rather than fabricating metrics.
         status = "resource_blocked"
         reason = config.get(
             "resource_requirement",
             "full-scale models/datasets and GPU memory are required and not available here",
         )
-        fidelity = _fidelity_record(config, attack.describe(), None, status)
+        fidelity = _fidelity_record(config, attack_descs, None, status)
         fidelity["resource_requirement"] = reason
         result_payload = {
             "name": name,
@@ -161,10 +174,14 @@ def run_from_config(config: dict, reports_root: str | None = None) -> dict:
     scenario_spec = config["scenario"]
     scenario = build_scenario(scenario_spec["name"], **scenario_spec.get("params", {}))
     ctx = build_context(scenario.scheme, scenario.sample, attacker_model=scenario.attacker_model)
-    result = attack.run(ctx)
-    metrics = compute_metrics(result, scenario.sample, ks)
+    # A smoke config normally names a single attack; if it bundles several, run
+    # each against the same scenario and report them under ``runs``.
+    results = [a.run(ctx) for a in attacks]
+    metrics_list = [compute_metrics(r, scenario.sample, ks) for r in results]
+    result = results[0]
+    metrics = metrics_list[0]
 
-    fidelity = _fidelity_record(config, attack.describe(), scenario.scheme.describe(), result.status.value)
+    fidelity = _fidelity_record(config, attack_descs, scenario.scheme.describe(), result.status.value)
     result_payload = {
         "name": name,
         "mode": mode,
@@ -172,6 +189,11 @@ def run_from_config(config: dict, reports_root: str | None = None) -> dict:
         "status_reason": result.status_reason,
         "metrics": metrics,
     }
+    if len(attacks) > 1:
+        result_payload["runs"] = [
+            {"attack": d["name"], "status": r.status.value, "metrics": m}
+            for d, r, m in zip(attack_descs, results, metrics_list)
+        ]
     if paths is not None:
         save_yaml(paths.resolved_config, config)
         save_json(paths.environment, environment_snapshot())
@@ -179,7 +201,7 @@ def run_from_config(config: dict, reports_root: str | None = None) -> dict:
         save_json(paths.predictions, _jsonable_predictions(result))
         save_json(paths.fidelity, fidelity)
         paths.run_log.write_text(
-            f"[{name}] mode=smoke attack={attack_name} scenario={scenario.name} "
+            f"[{name}] mode=smoke attack={specs[0][0]} scenario={scenario.name} "
             f"status={result.status.value}\n",
             encoding="utf-8",
         )

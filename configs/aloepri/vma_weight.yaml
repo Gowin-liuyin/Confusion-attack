@@ -1,0 +1,27 @@
+name: aloepri_vma_weight
+mode: full
+seed: 0
+paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (VMA), Table 9 (weight combinations), Section 7.3"}
+attack:
+  name: vma.weight_rowsort
+  variant: aloepri
+  params: {}
+defense:
+  weight_combinations:          # Table 9: known X / observed Y pairs exhibiting Y = Z1 X Z2 structure
+    - {known: "We Wh",            observed: "Pi W*embed Wh Pi^T"}
+    - {known: "We Wquery(We Wkey)^T", observed: "Pi W*embed Wquery (Pi W*embed Wkey)^T"}
+    - {known: "We Wgate",         observed: "Pi W*embed Wgate Zffn"}
+    - {known: "We Wup",           observed: "Pi W*embed Wup Sffn Zffn"}
+    - {known: "Wdown Wh",         observed: "Zffn^-1 Sffn^-1 Wdown W*head Pi^T"}
+    - {known: "We Wrouter",       observed: "Pi W*embed norm(Wrouter) Zrouter"}
+  multi_layer_voting: true       # VMA results of all decoder layers are combined by voting
+  privacy: {lambda: 0.3, expansion_h: 128, alpha_e: 1.0, alpha_h: 0.2, beta: 8, gamma: 1.0e-3}
+  note_alpha_e: "At alpha_e=0.5 the paper reports VMA recovers >30% tokens (weights differ almost only by permutations)."
+models: [Qwen2.5-14B-Instruct, R1-Distill-14B, R1-Distill-32B, Qwen3-14B, Qwen3-32B, Llama3-8B, Qwen3-MoE-30B-A3B, DS-V3.1-Terminus-671B]
+dataset: {description: "PUPA dataset; TTRSR / PIIRSR / BLEU-4"}
+metrics: {report: [ttrsr, piirsr, bleu4], ks: [1, 5, 10]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [VMA-B2-1, VMA-B2-2, METRIC-TTRSR]
+resource_requirement: "Requires AloePri-obfuscated weight matrices of 14B-671B models across decoder layers. Not available locally."
+notes: "RowSort recovers Z1 then Z2; duplicate rows are disambiguated by verification and multi-decoder-layer voting (verified exactly on synthetic Y=Z1 X Z2)."

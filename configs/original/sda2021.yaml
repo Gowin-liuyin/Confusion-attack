@@ -1,0 +1,44 @@
+name: original_sda2021
+mode: full
+seed: 0
+paper:
+  title: "Can Sequence-to-Sequence Models Crack Substitution Ciphers?"
+  authors: "Aldarrab & May, ACL 2021"
+  id: 2021.acl-long.561
+  section: "Section 3 (decipherment as seq2seq), frequency-rank encoding"
+attack:
+  name: sda.sda2021
+  variant: original_2021
+  params: {epochs: 20, beam_width: 100, num_train: 100000}
+cipher_type: "1:1 substitution"
+languages: 14                 # multilingual decipherment
+dataset:
+  source: "public plaintext enciphered with random 1:1 keys; Borg cipher (first 256 chars) as real test"
+conditions:
+  - "different cipher lengths"
+  - "no-space ciphers"
+  - "ciphers with noise"
+hyperparameters:
+  encoding: frequency_rank
+  model: "Transformer encoder-decoder"
+  objective: "L_Seq2Seq = -log P(Y|X)"
+  decode: beam_search
+metrics:
+  report: [symbol_error_rate, decode_accuracy]
+  ks: [1]
+fidelity:
+  approximations:
+    sampling: false
+    truncation: false
+    quantization: false
+    low_precision: false
+    pruning: false
+    early_stopping: false
+    candidate_truncation: false
+    approx_nearest_neighbor: false
+formula_refs: [SDA-2021-ENC, SDA-2021-OBJ]
+resource_requirement: >-
+  Paper-scale training needs ~1e5 synthesised cipher/plaintext pairs across 14
+  languages with beam width 100. The method is implemented and verified on a
+  small synthetic language; full multilingual training is not run here.
+notes: Frequency-rank encoding is kept strictly distinct from the 2023 recurrence encoding.

@@ -1,0 +1,44 @@
+name: original_isa_er_tbs
+mode: full
+seed: 0
+paper:
+  title: "Depth Gives a False Sense of Privacy: LLM Internal States Inversion"
+  authors: "Dong et al., USENIX Security 2025"
+  id: arXiv:2507.16372
+  section: "Algorithm 1 (ER blue / TBS red), Section 5, Appendix A"
+attack:
+  runs:
+    - {name: isa.er, variant: original, params: {distance: cos, lr: 0.0005, steps: 50000, lambda_dm: 0.001}}
+    - {name: isa.tbs, variant: original, params: {distance: cos, lr: 0.0001, steps: 50000, r: 8}}
+models:
+  - Llama-3-8B-Instruct
+  - Qwen2.5-7B-Instruct
+layers: {er: "shallow layers", tbs: [8, 16, 32]}
+dataset:
+  description: "top-100 longest prompts from MentalHealth / Doctor / benchmark sets (held out)"
+hyperparameters:
+  optimizer: AdamW
+  distribution_matching: "random Gaussian neural network universal features + batch statistics"
+  phi_z: "arctan scaling (paper uses alpha = 5/pi to accelerate; the (-pi/2, pi/2) bound is preserved)"
+metrics:
+  report: [cosine_similarity, token_f1, exact_match]
+  ks: [1]
+fidelity:
+  approximations:
+    sampling: false
+    truncation: false
+    quantization: false
+    low_precision: false
+    pruning: false
+    early_stopping: false
+    candidate_truncation: false
+    approx_nearest_neighbor: false
+formula_refs: [ISA-1, ISA-ER-IM, ISA-ER-INV, ISA-TBS-SVD, ISA-TBS-REPARAM]
+resource_requirement: >-
+  Requires Llama-3-8B / Qwen2.5-7B with gradient access and ~5e4 optimisation
+  steps per prompt. Infeasible on the local 8 GB GPU; here the ER state loss,
+  the random-Gaussian-feature L_dm, the TBS SVD basis and the arctan bound are
+  verified on the frozen toy model.
+notes: >-
+  Model weights are frozen during optimisation; only the input variables are
+  updated. Token recovery is by per-row max cosine similarity (Algorithm 1 line 11).

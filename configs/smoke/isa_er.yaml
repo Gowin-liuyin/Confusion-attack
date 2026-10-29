@@ -1,0 +1,11 @@
+name: smoke_isa_er
+mode: smoke
+seed: 0
+attack:
+  name: isa.er
+  params: {steps: 300, lr: 0.1, distance: l2}
+scenario:
+  name: isa
+  params: {vocab: 16, d: 16, n: 4, layers: 1, layer: 1}
+metrics: {ks: [1, 5, 10]}
+notes: ER optimization-based state inversion smoke test (original ISA).

@@ -1,0 +1,11 @@
+name: smoke_sda2021
+mode: smoke
+seed: 0
+attack:
+  name: sda.sda2021
+  params: {epochs: 15, num_train: 256, beam_width: 5}
+scenario:
+  name: sda
+  params: {num_corpus: 120, eval_words: 3}
+metrics: {ks: [1, 5, 10]}
+notes: Frequency-rank + seq2seq decipherment smoke test (original SDA 2021).

@@ -1,0 +1,21 @@
+name: aloepri_tfma
+mode: full
+seed: 0
+paper: {title: "AloePri", id: 2603.01499v2, section: "Section 7.6, Table 5 (Token Frequency Leakage)"}
+attack:
+  name: tfma.independent          # the paper matches ciphertext token frequency to a prior
+  variant: aloepri
+  params: {top_k: 100}
+knowledge_settings:               # three prior-knowledge levels
+  - {name: zero_knowledge,    public: CCI3,         private: Huatuo26M-Lite}
+  - {name: domain_aware,      public: MedDialog,    private: Huatuo26M-Lite}
+  - {name: distribution_aware, public: Huatuo26M-Lite, private: "Huatuo26M-Lite (different subset)"}
+metrics: {report: [top10_mapping_asr, top100_mapping_asr], ks: [10, 100]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [TFMA-1, TFMA-2]
+resource_requirement: "Requires the CCI3 / Huatuo26M-Lite / MedDialog corpora and the target tokenizer to count frequencies at scale."
+notes: >-
+  Uses the paper's per-symbol nearest-frequency matching (TFMA-2). The global
+  Hungarian assignment (TFMA-3) is a SEPARATE experimental extension
+  (tfma.global_assignment), never substituted for the paper method.

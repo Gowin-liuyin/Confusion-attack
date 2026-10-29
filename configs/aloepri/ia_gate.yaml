@@ -1,0 +1,17 @@
+name: aloepri_ia_gate
+mode: full
+seed: 0
+paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (Gate-IA)"}
+attack: {name: ia.gate, variant: aloepri, params: {top_k: 10}}
+precondition: "alpha_e = 0 (no embedding noise) - the Avg(e Wgate) = Avg(e~ W~gate) invariant is exact only then"
+defense:
+  privacy: {alpha_e: 0.0, alpha_h: 0.2, lambda: 0.3, expansion_h: 128, beta: 8, gamma: 1.0e-3}
+  layers: "gate weights from multiple decoder layers stacked into the invariant vector"
+models: [Qwen2.5-14B-Instruct]
+dataset: {description: "private tokens; mapping recovery (TTRSR)"}
+metrics: {report: [mapping_top1_accuracy, ttrsr], ks: [1, 5, 10]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [IA-GATE-1]
+resource_requirement: "Requires AloePri obfuscated gate weights and embeddings of the target LLM across decoder layers."
+notes: "The alpha_e=0 precondition is recorded; additive embedding noise breaks the invariant (paper's defence against Gate-IA)."

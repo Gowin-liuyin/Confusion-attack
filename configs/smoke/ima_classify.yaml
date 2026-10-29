@@ -1,0 +1,11 @@
+name: smoke_ima_classify
+mode: smoke
+seed: 0
+attack:
+  name: ima.classify
+  params: {knowledge: WB, epochs: 150, lr: 0.01, hidden_dims: [64]}
+scenario:
+  name: ima
+  params: {vocab: 10, d: 8, n: 6, num_corpus: 40}
+metrics: {ks: [1, 5, 10]}
+notes: InvBERT per-position classify inverter smoke test (original IMA).

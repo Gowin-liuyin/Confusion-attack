@@ -1,0 +1,20 @@
+name: aloepri_isa_state
+mode: full
+seed: 0
+paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (ISA), Section 7.5, Table 4"}
+attack: {name: isa.aloepri_state, variant: aloepri, params: {distance: cos, steps: 50000, lr: 0.0005}}
+procedure:
+  - "record State1 from the client's private input X1"
+  - "randomly initialise X2 and evaluate State2"
+  - "optimize X2 by the state loss until State2 matches State1 (model weights fixed)"
+targets: [AttnScore, HiddenState]   # Table 4 ablation: which internal states are attacked
+defense:
+  mechanisms_ablated: [Noise, KeyMat, Head&BlockPerm]
+  privacy: {alpha_e: 1.0, alpha_h: 0.2, lambda: 0.3, expansion_h: 128, beta: 8, gamma: 1.0e-3}
+models: [Qwen2.5-14B-Instruct]
+metrics: {report: [ttrsr], ks: [1]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [ISA-1]
+resource_requirement: "Requires the AloePri-obfuscated LLM with gradient access and ~5e4 steps per input; infeasible locally."
+notes: "This is the generic State1/State2 optimisation (L_im only). It does NOT claim to reproduce the original ER/TBS pipeline."

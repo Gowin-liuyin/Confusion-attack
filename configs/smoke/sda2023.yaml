@@ -1,0 +1,11 @@
+name: smoke_sda2023
+mode: smoke
+seed: 0
+attack:
+  name: sda.sda2023
+  params: {epochs: 20, num_train: 256, lr: 0.0005, beam_width: 5}
+scenario:
+  name: sda
+  params: {num_corpus: 120, eval_words: 3}
+metrics: {ks: [1, 5, 10]}
+notes: Recurrence + causal-LM (two-term CLM) decipherment smoke test (original SDA 2023).

@@ -1,0 +1,17 @@
+name: aloepri_ia_attn
+mode: full
+seed: 0
+paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (Attn-IA)"}
+attack: {name: ia.attn, variant: aloepri, params: {block_size: 2}}
+defense:
+  block_structure: "RoPE 2x2 blocks of query/key weights"
+  note: "AloePri further applies head and block permutation to break the block-wise consistency the invariant needs."
+  privacy: {alpha_e: 1.0, alpha_h: 0.2, lambda: 0.3, expansion_h: 128, beta: 8, gamma: 1.0e-3}
+models: [Qwen2.5-14B-Instruct]
+dataset: {description: "private tokens; mapping recovery"}
+metrics: {report: [mapping_top1_accuracy, ttrsr], ks: [1, 5, 10]}
+fidelity:
+  approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
+formula_refs: [IA-ATTN-1]
+resource_requirement: "Requires the target LLM's query projections per head/block; not available locally."
+notes: "Singular query Gram blocks are SKIPPED (no pseudo-inverse); the whitening invariant is verified under invertible block transforms."

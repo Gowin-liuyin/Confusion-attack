@@ -1,0 +1,44 @@
+name: osnip_knn
+mode: full
+seed: 42                       # OSNIP App. C: fixed random seed 42
+paper:
+  title: "OSNIP: Breaking the Privacy-Utility-Efficiency Trilemma in LLM Inference via Obfuscated Semantic Null Space"
+  id: 2601.22752v1
+  section: "Appendix C.1 (KNN Attack Setup), Section 4.3, Table 5"
+attack:
+  name: nn_knn.euclidean        # OSNIP ranks vocabulary tokens by Euclidean distance
+  variant: original
+  params: {top_k: 10}
+  also_run: [nn_knn.cosine]     # cosine reported as the direction-stable metric
+models:                         # OSNIP evaluates four open-source LLMs
+  - Llama-3.2-1B
+  - Llama-3.2-3B-Instruct
+  - Qwen3-14B
+  - Qwen3-32B
+dataset:
+  source: tatsu-lab/alpaca
+  construction: "concatenate the instruction and input fields"
+  filter: "retain texts with 20-512 characters"
+  sample: 1000                  # randomly sample 1,000 instances for testing
+metrics:
+  report: [top1_asr, top5_asr, top10_asr]
+  ks: [1, 5, 10]
+fidelity:
+  approximations:               # attack-side approximations - all forbidden
+    sampling: false
+    truncation: false
+    quantization: false
+    low_precision: false
+    pruning: false
+    early_stopping: false
+    candidate_truncation: false
+    approx_nearest_neighbor: false   # full vocabulary ranking, exact NN
+formula_refs: [NN-1, NN-2, METRIC-ASR]
+resource_requirement: >-
+  Requires the four target LLMs (up to Qwen3-32B) and their embedding/hidden
+  states over 1,000 Alpaca samples. The 8 GB local GPU cannot host these models;
+  full ranking over the entire vocabulary per token is exact but memory-heavy.
+notes: >-
+  Faithful transcription of OSNIP Appendix C.1. Not executed here (resource
+  blocked); the KNN algorithm and metrics are verified on synthetic scenarios
+  and math tests.

@@ -1,0 +1,11 @@
+name: smoke_ia_attn
+mode: smoke
+seed: 0
+attack:
+  name: ia.attn
+  params: {block_size: 2}
+scenario:
+  name: ia_attn
+  params: {n_tokens: 24, block: 2, num_blocks: 4}
+metrics: {ks: [1, 5, 10]}
+notes: Attn-IA whitening quadratic-form invariant smoke test (AloePri).

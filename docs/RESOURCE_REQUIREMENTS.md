@@ -35,11 +35,12 @@ full reproduction.
    the obfuscated target model).
 4. Run `python scripts/run_experiment.py --config configs/<lineage>/<name>.yaml`.
 
-## Remote / Git delivery blocker (reported, not worked around)
+## Remote / Git delivery
 
-At build time the GitHub CLI token was invalid (`gh auth status` -> "token in keyring is invalid")
-and HTTPS to github.com failed TLS negotiation (`git ls-remote` -> schannel handshake failure;
-`gh api` -> 403 / EOF). Per the Goal's stopping rule the remote push / PR step is therefore blocked
-and reported; it must be completed once `gh` is re-authenticated and network access to github.com is
-restored (`gh auth login`, then `git push -u origin <branch>` and `gh pr create --fill`). Local git
-history and the feature branch are prepared so the push is a single step afterwards.
+The feature branch `feat/faithful-attack-reproduction` is pushed to
+`Gowin-liuyin/Confusion-attack` and a pull request is open. After the paper-alignment fixes, additional
+commits are pushed to the same branch (which updates the open PR); the default branch is never pushed
+to directly and the PR is not merged from here. Git uses HTTPS + the current `gh` credentials; no token
+is written to files, logs, or commits. The local author identity is set for this repository only (not
+globally). If `gh` auth or network to github.com is unavailable, the push step stops and is reported
+rather than retried under a different identity.

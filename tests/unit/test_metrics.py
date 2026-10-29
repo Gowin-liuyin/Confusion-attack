@@ -78,3 +78,37 @@ def test_mapping_asr_at_k():
     true = {0: 6, 1: 9}
     assert mapping_asr_at_k(cands, true, 1) == 0.0
     assert mapping_asr_at_k(cands, true, 2) == 0.5
+
+
+def test_symbol_error_rate_positional_and_length_aware():
+    from obfuscation_attacks.metrics import symbol_error_rate
+
+    assert symbol_error_rate([1, 2, 3], [1, 2, 3]) == 0.0
+    assert symbol_error_rate([1, 9, 3], [1, 2, 3]) == pytest.approx(1 / 3)
+    # shorter prediction: the missing position counts as an error
+    assert symbol_error_rate([1, 2], [1, 2, 3]) == pytest.approx(1 / 3)
+    # with equal lengths SER == 1 - ttrsr
+    assert symbol_error_rate([1, 9, 3], [1, 2, 3]) == pytest.approx(1 - 2 / 3)
+    # special positions excluded
+    assert symbol_error_rate([9, 2, 3], [1, 2, 3], special_mask=[True, False, False]) == 0.0
+
+
+def test_recovered_cosine_similarity_token_level():
+    from obfuscation_attacks.metrics import recovered_cosine_similarity
+
+    E = np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])
+    assert recovered_cosine_similarity([0], [0], E) == pytest.approx(1.0)   # same token
+    assert recovered_cosine_similarity([2], [0], E) == pytest.approx(-1.0)  # opposite
+    assert recovered_cosine_similarity([1], [0], E) == pytest.approx(0.0)   # orthogonal
+    # averaged over positions
+    assert recovered_cosine_similarity([0, 1], [0, 0], E) == pytest.approx(0.5)
+
+
+def test_bleu4_token_level():
+    from obfuscation_attacks.metrics import bleu4
+
+    seq = [1, 2, 3, 4, 5]
+    assert bleu4(seq, seq) == pytest.approx(1.0)        # exact match
+    assert bleu4([6, 7, 8, 9], [1, 2, 3, 4]) == 0.0     # no overlapping n-grams
+    # a short partial overlap with missing 4-grams scores 0 (unsmoothed)
+    assert bleu4([1, 2, 9, 9], [1, 2, 3, 4]) == 0.0

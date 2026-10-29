@@ -28,14 +28,25 @@ the full paper-scale experiments (see `RESOURCE_REQUIREMENTS.md`).
 
 ## What is verified here (CPU, tiny models / synthetic scenarios)
 
-- Mathematical identities: NN L2/cosine ranking and zero-vector handling; sorted-L1 permutation
-  invariance; `Y = Z1 X Z2` RowSort recovery incl. duplicate-row disambiguation and multi-layer
-  voting; EDNN glide difference invariant (with a general-reflection counterexample); Gate-IA average
-  invariance; Attn-IA whitening invariance incl. singular-block skipping; cross-entropy and softmax;
-  the two-term SDA-2023 CLM loss vs the target-only SDA-2021 loss; recurrence vs frequency-rank
-  encodings; Qwen2 inverter fixed at 2 layers / 8 heads.
-- End-to-end recovery on synthetic scenarios that contain the genuine leakage: each attack recovers
-  the planted secret (tokens / mapping / permutation) through the capability-gated interface.
+- Mathematical identities: NN L2/cosine ranking, zero-vector handling, and the **full-ranking** return
+  (ASR@k not capped); sorted-L1 permutation invariance and the sequence-/factorized-permutation
+  reversals; `Y = Z1 X Z2` RowSort recovery with **nearest-neighbor matching** (noise-tolerant),
+  **per-layer majority voting**, and duplicate-row **partial** reporting (no fake `verified`); the
+  **autoregressive** OSNIP L1-replay; EDNN glide difference invariant (with a general-reflection
+  counterexample and the cyclic first/last wrap); Gate-IA average invariance **under AloePri's real
+  wider-key transform** (exact at α_e=0, broken by noise); Attn-IA whitening invariance across
+  **multi-head / key-side / RoPE-pairing** inputs incl. singular-block skipping; cross-entropy and
+  softmax; the TBS **full-`d_in` basis** (both V and Vᵀ strategies) and the `α·arctan` reparam; the ER
+  `L_dm` **Eq. 3** form (mean-matching, resampled random features); the two-term SDA-2023 CLM loss vs the
+  target-only SDA-2021 loss; **injective** SDA-2021 frequency-rank vs recurrence encoding; the metrics
+  (ASR@k, token P/R/F1, TTRSR, Total/Clean ASR, SER, token-level CosSim, BLEU-4); Qwen2 inverter fixed at
+  2 layers / 8 heads.
+- The faithful **IMA key-holdout** threat model: training on attacker-sampled keys with a held-out client
+  key recovers at ≈ chance (matching AloePri Table 2 IMA = 0.0), while a known-key run proves the
+  inverter has capacity.
+- End-to-end recovery on synthetic scenarios that contain the genuine leakage: each applicable attack
+  recovers the planted secret (tokens / mapping / permutation) through the capability-gated interface;
+  `scripts/verify_fidelity.py` additionally pins the SDA encodings and full-config paper scale at runtime.
 
 ## What is NOT claimed
 

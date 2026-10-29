@@ -23,7 +23,9 @@ attack name, the full paper config, and the runnable synthetic smoke config.
 ## Knowledge settings and metrics
 
 - **OSNIP KNN**: Top-1/5/10 ASR over 1,000 Alpaca samples, 4 LLMs, seed 42.
-- **OSNIP VMA**: Total/Clean ASR, layer-wise (L1..L39), 300k pool, 200x5 reps, NLTK stop words.
+- **OSNIP VMA**: Total/Clean ASR, layer-wise (L1..L39); autoregressive L1 hidden-state reconstruction
+  (replay the clean model on `[x̂_<i, v]`, take the L1-nearest layer-l state, feed back). The App. C.2
+  300k figure is a pool of text samples (200 instances x 5 keys = 1,000 reps), NLTK stop words for Clean.
 - **AloePri**: TTRSR / PIIRSR / CosSim / BLEU-4; TFMA Top-10/100 in Zero-/Domain-/Distribution-aware settings.
 - **InvBERT IMA**: WB / GB / BB knowledge settings.
 - **Hidden No More VMA**: permutation types none / sequence-dim / hidden-dim / factorized-2D.

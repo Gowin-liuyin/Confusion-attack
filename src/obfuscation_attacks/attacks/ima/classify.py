@@ -1,11 +1,20 @@
-"""IMA *Classify* inverter - InvBERT Classify line (Kugler et al., GB attack).
+"""IMA *Classify* inverter - InvBERT Classify line (Kugler et al., **GB** attack).
 
-InvBERT Classify assumes the tokenizer ``tok()`` is known, so the contextualized
-token embeddings (CTEs) and vocabulary ids have a one-to-one mapping and the
-inversion collapses to a *high-dimensional per-position token classification*
-task: "We train a multi-layer perceptron to predict the vocabulary IDs given
-CTEs" (InvBERT 4.2), trained with AdamW and "the basic cross-entropy loss"
-(InvBERT 4.2).
+InvBERT draws the lines of attack explicitly: "We call our GB attack InvBert
+Classify and our BB attack InvBert Seq2Seq" (InvBERT Sec. 3.2). Classify is
+therefore a **Gray-Box** attack: the tokenizer ``tok()`` is known, so the
+contextualized token embeddings (CTEs) and vocabulary ids have a one-to-one
+mapping and the inversion collapses to a *high-dimensional per-position token
+classification* task - "As we use the given tokenizer, CTEs and IDs have a
+one-to-one mapping, and our attack boils down to a high-dimensional token
+classification task" (InvBERT Sec. 4.2, InvBERT Classify (GB)). It is trained
+with AdamW and "the basic cross-entropy loss" (InvBERT Sec. 4.2).
+
+Because Classify is the GB attack, this module supports the **WB** and **GB**
+knowledge settings only. The **BB** setting (no tokenizer, no one-to-one map) is
+InvBERT *Seq2Seq* and is implemented in :mod:`.seq2seq`; asking Classify for BB
+returns ``not_applicable`` rather than pretending a per-position classifier is a
+black-box attack.
 
 Formulae (docs/FORMULA_LEDGER.md: IMA-CE-1, IMA-CLS-1)::
 
@@ -18,21 +27,20 @@ linear projection to vocabulary logits. The same parameters are applied
 independently at every position (weight sharing), so ``context`` for Classify is
 exactly the target position's representation ``h_t``.
 
-Knowledge settings (InvBERT 3.1) differ only in *how the training pairs /
+Knowledge settings (InvBERT Sec. 3.1) differ only in *how the training pairs /
 knowledge are obtained*; the model maths are identical and the setting is
 recorded in diagnostics:
 
-* ``WB`` (white box) - encoder architecture + parameters + tokenizer are known.
-  The attacker obfuscates the public ``reference_corpus`` with the known
-  mechanism (unlimited queries) and additionally probes every vocabulary id once
-  to guarantee full-vocabulary coverage.
-* ``GB`` (gray box) - the tokenizer is known (so per-position classification is
-  valid) but the attacker makes no use beyond pairing public plaintext with its
-  obfuscated embeddings; unlimited oracle queries over the public corpus, no
-  vocabulary probing.
-* ``BB`` (black box) - ``obfuscation_fn`` is treated strictly as an opaque query
-  oracle under a finite query budget (InvBERT notes the number of queries to
-  ``enc()`` may be limited); corpus-only coverage.
+* ``GB`` (gray box, the InvBERT Classify setting) - the tokenizer is known (so
+  the one-to-one CTE<->id map and per-position classification are valid); the
+  attacker pairs public plaintext with its obfuscated embeddings using unlimited
+  oracle queries over the public corpus, with no vocabulary probing.
+* ``WB`` (white box) - additionally the encoder architecture + parameters are
+  known. Because a successful GB attack also works in WB (InvBERT Sec. 3.2), the
+  model is unchanged; the extra power is used only to *probe every vocabulary id
+  once* (each id queried on its own, see ``_build_pairs``) to guarantee full
+  class coverage of the training set.
+* ``BB`` (black box) -> ``not_applicable`` here: BB is InvBERT Seq2Seq.
 """
 
 from __future__ import annotations
@@ -120,7 +128,7 @@ def train_classifier(
     batch_size: Optional[int] = None,
     seed: int = 0,
 ) -> list[float]:
-    """Minimise the cross-entropy objective with AdamW (InvBERT 4.2).
+    """Minimise the cross-entropy objective with AdamW (InvBERT Sec. 4.2).
 
     Returns the per-epoch mean training loss so callers can assert convergence.
     """
@@ -174,7 +182,7 @@ def classifier_predict(
 
 @register
 class ClassifyInverter(Attack):
-    """InvBERT Classify: per-position MLP token classifier over obfuscated CTEs."""
+    """InvBERT Classify (GB): per-position MLP token classifier over obfuscated CTEs."""
 
     name = "ima.classify"
     family = "ima"
@@ -201,38 +209,33 @@ class ClassifyInverter(Attack):
 
     train_accuracy = staticmethod(classifier_accuracy)
 
-    # --- the attack ----------------------------------------------------------
+    # --- training-pair synthesis --------------------------------------------
     def _build_pairs(
         self, ctx: AttackContext, knowledge: str, vocab: int
     ) -> tuple[np.ndarray, np.ndarray, dict]:
+        """Synthesise (obfuscated embedding, token id) pairs from public data.
+
+        The attack consumes only ``ctx.reference_corpus`` (public plaintext) and
+        ``ctx.obfuscation_fn`` (the known *algorithm*, keyed by the attacker, not
+        the client). It never sees a key or the evaluated sample's ground truth.
+        """
         corpus = [np.asarray(s).astype(int).ravel() for s in ctx.reference_corpus]
-        info: dict = {}
-        if knowledge == "BB":
-            default_budget = min(len(corpus), 64)
-            budget = int(self.params.get("query_budget", default_budget))
-            seqs = corpus[: max(budget, 0)]
-            info["query_budget"] = budget
+        info: dict = {"query_budget": None}
+        if knowledge == "GB":
             info["knowledge_note"] = (
-                "black-box: obfuscation_fn used only as an opaque query oracle under a "
-                "finite query budget"
+                "gray-box (InvBERT Classify): tokenizer known (one-to-one CTE<->id); "
+                "unlimited oracle queries over the public corpus, no vocabulary probing"
             )
-        else:
-            seqs = corpus
-            info["query_budget"] = None
-            if knowledge == "GB":
-                info["knowledge_note"] = (
-                    "gray-box: tokenizer known (one-to-one CTE<->id); unlimited oracle "
-                    "queries over the public corpus, no vocabulary probing"
-                )
-            else:  # WB
-                info["knowledge_note"] = (
-                    "white-box: full pipeline knowledge; unlimited oracle queries over the "
-                    "public corpus plus one probe per vocabulary id for full coverage"
-                )
+        else:  # WB
+            info["knowledge_note"] = (
+                "white-box: GB model plus full pipeline knowledge; unlimited oracle "
+                "queries over the public corpus plus one probe per vocabulary id for "
+                "full class coverage"
+            )
 
         X_list: list[np.ndarray] = []
         y_list: list[np.ndarray] = []
-        for seq in seqs:
+        for seq in corpus:
             if seq.size == 0:
                 continue
             obf = np.asarray(ctx.obfuscation_fn(seq), dtype=float)
@@ -246,18 +249,26 @@ class ClassifyInverter(Attack):
 
         info["queries_used"] = len(X_list)
 
-        # WB full-vocabulary probing: the white-box attacker has unlimited query
-        # access, so it can obtain one obfuscated embedding per vocabulary id to
-        # guarantee every class is represented in the training set. This assumes
-        # the obfuscation is token-local (exact for permutation/linear schemes;
-        # an approximation for strongly context-dependent encoders).
+        # WB full-vocabulary probing. The white-box attacker has unlimited query
+        # access, so it obtains one obfuscated embedding per vocabulary id to
+        # guarantee every class is represented in the training set. Each id is
+        # probed *on its own* - i.e. ``obfuscation_fn([id])`` in a length-1
+        # context - rather than feeding the entire vocabulary as one long
+        # sequence; the latter would entangle positions for a context-dependent
+        # encoder and misrepresent the per-id probe. (For token-local schemes the
+        # two coincide, but the per-id form is the faithful one.)
         if knowledge == "WB" and bool(self.params.get("wb_probe_vocab", True)):
-            probe_ids = np.arange(int(vocab), dtype=int)
-            obf = np.asarray(ctx.obfuscation_fn(probe_ids), dtype=float)
-            if obf.ndim == 2 and obf.shape[0] == probe_ids.size:
-                X_list.append(obf)
-                y_list.append(probe_ids)
-                info["wb_vocab_probed"] = int(vocab)
+            probe_rows: list[np.ndarray] = []
+            probe_ids: list[int] = []
+            for tid in range(int(vocab)):
+                o = np.asarray(ctx.obfuscation_fn(np.array([tid], dtype=int)), dtype=float)
+                if o.ndim == 2 and o.shape[0] == 1:
+                    probe_rows.append(o[0])
+                    probe_ids.append(tid)
+            if probe_rows:
+                X_list.append(np.stack(probe_rows, axis=0))
+                y_list.append(np.asarray(probe_ids, dtype=int))
+                info["wb_vocab_probed"] = len(probe_ids)
 
         if not X_list:
             return np.zeros((0, 0)), np.zeros((0,), dtype=int), info
@@ -266,9 +277,19 @@ class ClassifyInverter(Attack):
         return X, y, info
 
     def _run(self, ctx: AttackContext) -> AttackResult:
-        knowledge = str(self.params.get("knowledge", "WB")).upper()
-        if knowledge not in {"WB", "GB", "BB"}:
-            return AttackResult.failed(f"unknown knowledge setting {knowledge!r}")
+        # Classify is the InvBERT GB attack -> WB/GB only. BB is InvBERT Seq2Seq.
+        knowledge = str(self.params.get("knowledge", "GB")).upper()
+        if knowledge == "BB":
+            return AttackResult.not_applicable(
+                "InvBERT Classify is the GB attack (Sec. 3.2 'We call our GB attack InvBert "
+                "Classify and our BB attack InvBert Seq2Seq'); the black-box setting is "
+                "ima.seq2seq (InvBERT Seq2Seq), which trains a custom tokenizer instead of "
+                "assuming a one-to-one CTE<->id map. Use ima.seq2seq for BB."
+            )
+        if knowledge not in {"WB", "GB"}:
+            return AttackResult.failed(
+                f"unknown knowledge setting {knowledge!r} (Classify supports WB or GB)"
+            )
         if ctx.obfuscation_fn is None:
             return AttackResult.not_applicable(
                 "Classify-IMA needs obfuscation_fn (KNOWN_OBFUSCATION_ALGORITHM)"

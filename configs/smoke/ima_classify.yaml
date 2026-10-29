@@ -3,9 +3,15 @@ mode: smoke
 seed: 0
 attack:
   name: ima.classify
-  params: {knowledge: WB, epochs: 150, lr: 0.01, hidden_dims: [64]}
+  # Classify supports WB/GB only (it is InvBERT's GB attack; BB is ima.seq2seq). GB is the
+  # default; WB is exercised here so the smoke covers the per-id vocabulary-probe path. The
+  # synthetic `ima` scenario is token-local, so per-id probing yields full class coverage.
+  params: {knowledge: WB, epochs: 150, lr: 0.01, hidden_dims: [64], top_k: 10}
 scenario:
   name: ima
   params: {vocab: 10, d: 8, n: 6, num_corpus: 40}
 metrics: {ks: [1, 5, 10]}
-notes: InvBERT per-position classify inverter smoke test (original IMA).
+notes: >-
+  InvBERT per-position Classify inverter smoke test (original IMA, GB attack). WB is selected
+  to exercise full-vocabulary probing (one probe per id, queried independently). The faithful
+  unknown-key threat model (recovery ~ chance) is covered in tests/regression/test_ima_regression.py.

@@ -14,6 +14,9 @@ Checks (static + a few fast runtime invariants):
 5. Runtime invariants that would break if an algorithm were swapped for a
    non-faithful one (L1->L2, RowSort->NN, glide difference invariant, gate
    average invariant, sorted-L1 permutation invariance).
+6. SDA encodings at runtime: 2021 frequency-rank is injective per symbol and
+   differs from 2023 recurrence encoding (first-appearance order).
+7. Full SDA configs carry paper scale (beam width, training-cipher count).
 """
 
 from __future__ import annotations
@@ -165,12 +168,69 @@ def check_runtime_invariants() -> None:
     check(_sorted_l1(v, v[rng.permutation(10)]) < 1e-9, "sorted-L1 permutation invariance broken")
 
 
+def check_sda_encodings() -> None:
+    """Pin the SDA encodings at runtime (the CRITICAL 2021 fix + 2021 vs 2023).
+
+    * 2021 frequency-rank must be INJECTIVE per symbol (distinct cipher symbols ->
+      distinct codes); the old competition-ranking collapsed equal-count symbols
+      to one code, destroying the substitution structure.
+    * recurrence encoding (first-appearance order) must DIFFER from frequency-rank
+      encoding when frequency order != first-appearance order, and must be the
+      1-indexed first-appearance sequence (ABACAD -> 1 2 1 3 1 4).
+    """
+    from obfuscation_attacks.attacks.sda import encodings as enc
+
+    # counts: 0->3, 1->2, 2->2 (a tie between 1 and 2)
+    seq = [0, 1, 2, 0, 1, 2, 0]
+    codes = list(enc.frequency_rank_encode(seq))
+    sym2code: dict[int, int] = {}
+    injective = True
+    for s, c in zip(seq, codes):
+        if s in sym2code and sym2code[s] != c:
+            injective = False
+        sym2code[s] = c
+    check(injective, "SDA-2021 frequency-rank code is not a function of the symbol")
+    check(
+        len(set(sym2code.values())) == len(set(seq)),
+        "SDA-2021 frequency-rank encoding is not injective per symbol "
+        f"({len(set(sym2code.values()))} codes for {len(set(seq))} symbols) - "
+        "equal-count symbols must still get distinct codes (paper Fig. 5)",
+    )
+
+    # recurrence vs frequency-rank: frequency order (3,5,1) != first-appearance (5,3,1)
+    s2 = [5, 5, 3, 3, 3, 1]
+    rec2 = list(enc.recurrence_encode(s2))
+    fr2 = list(enc.frequency_rank_encode(s2))
+    check(rec2 != fr2, "recurrence encoding must differ from frequency-rank encoding")
+
+    abacad = [0, 1, 0, 2, 0, 3]  # A B A C A D
+    check(
+        list(enc.recurrence_encode(abacad)) == [1, 2, 1, 3, 1, 4],
+        "recurrence encoding ABACAD must be the 1-indexed first-appearance sequence 1 2 1 3 1 4",
+    )
+
+
+def check_sda_config_scale() -> None:
+    """Full SDA configs must carry paper scale, not shrunk smoke values."""
+    def load(rel: str) -> dict:
+        return yaml.safe_load((ROOT / rel).read_text(encoding="utf-8"))
+
+    c21 = load("configs/original/sda2021.yaml").get("attack", {}).get("params", {})
+    check(int(c21.get("beam_width", 0)) >= 100, "SDA-2021 full config beam_width < 100 (paper uses 100)")
+    check(int(c21.get("num_train", 0)) >= 2_000_000, "SDA-2021 full config num_train < 2e6 (paper)")
+    c23 = load("configs/original/sda2023.yaml").get("attack", {}).get("params", {})
+    check(int(c23.get("beam_width", 0)) >= 200, "SDA-2023 full config beam_width < 200 (paper uses 200)")
+    check(int(c23.get("num_train", 0)) >= 1_200_000, "SDA-2023 full config num_train < 1.2e6 (paper)")
+
+
 def main() -> int:
     check_registry()
     check_qwen2()
     check_configs()
     check_formula_ledger()
     check_runtime_invariants()
+    check_sda_encodings()
+    check_sda_config_scale()
 
     if FAILURES:
         print("FIDELITY CHECK FAILED:")
@@ -178,7 +238,8 @@ def main() -> int:
             print(f"  - {f}")
         return 1
     print("FIDELITY CHECK PASSED: 7 families, variants separated, formulas traceable, "
-          "invariants hold, full configs declare no approximations.")
+          "invariants hold (incl. injective SDA frequency-rank vs recurrence), full configs "
+          "declare no approximations and carry paper scale.")
     return 0
 
 

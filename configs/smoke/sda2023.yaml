@@ -3,9 +3,11 @@ mode: smoke
 seed: 0
 attack:
   name: sda.sda2023
-  params: {epochs: 20, num_train: 256, lr: 0.0005, beam_width: 5}
+  # SMOKE-only tiny sizes for a fast CPU run; paper scale (beam 200, 1.2M train,
+  # lengths up to 256, 12-layer/12-head/FF1536 ~23M) lives in configs/original/sda2023.yaml.
+  params: {epochs: 20, num_train: 256, lr: 0.0005, beam_width: 5}  # SMOKE-only (not paper scale)
 scenario:
   name: sda
   params: {num_corpus: 120, eval_words: 3}
 metrics: {ks: [1, 5, 10]}
-notes: Recurrence + causal-LM (two-term CLM) decipherment smoke test (original SDA 2023).
+notes: Recurrence + causal-LM (two-term CLM, both terms) decipherment smoke test (original SDA 2023). SMOKE-only sizes.

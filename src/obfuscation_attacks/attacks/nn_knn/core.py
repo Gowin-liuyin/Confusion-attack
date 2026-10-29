@@ -63,9 +63,14 @@ def run_knn(ctx: AttackContext, metric: str, top_k: int) -> AttackResult:
         raise ValueError(f"unknown metric {metric!r}")
 
     n, vocab = dist.shape
-    k = min(top_k, vocab)
-    order = np.argsort(dist, axis=1, kind="stable")  # full ranking per position
-    candidates = [order[i, :k].tolist() for i in range(n)]
+    # Return the FULL per-position ranking: every vocabulary id in ascending
+    # distance order. Both Song & Raghunathan (2020) and OSNIP (App. C.1) report
+    # whether the ground-truth token appears in the Top-k of the *entire*
+    # vocabulary, and the scorer (metrics.asr_at_k) slices the k it needs.
+    # Truncating here would cap ASR@k at the attack's requested k, so we never
+    # shrink the candidate pool in code (small pools live only in smoke configs).
+    order = np.argsort(dist, axis=1, kind="stable")
+    candidates = order.tolist()  # n lists, each of length == vocab
     recovered = order[:, 0].astype(int)
 
     # First/second candidate margin per position (diagnostic for ambiguity).
@@ -83,7 +88,10 @@ def run_knn(ctx: AttackContext, metric: str, top_k: int) -> AttackResult:
         candidates=candidates,
         diagnostics={
             "metric": metric,
-            "top_k": k,
+            # requested_top_k is informational only; the ranking is NOT truncated
+            # to it (the scorer slices Top-k itself).
+            "requested_top_k": int(top_k),
+            "ranking_length": int(vocab),
             "vocab_size": int(vocab),
             "num_positions": int(n),
             "first_second_margin": margins,

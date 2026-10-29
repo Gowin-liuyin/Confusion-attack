@@ -5,19 +5,19 @@ paper:
   title: "Information Leakage in Embedding Models"
   authors: "Song & Raghunathan, CCS 2020"
   id: arXiv:2004.00053
-  section: "Nearest-neighbour / white-box inversion"
+  section: "Sec 3.1 white-box inversion (Eq 3/5/7); Sec 6.2 evaluation (precision/recall/F1 over the recovered word SET)"
 attack:
-  name: nn_knn.euclidean
+  name: nn_knn.euclidean          # OSNIP-style single-token Euclidean retrieval (NN-1); NOT Song's method
   variant: original
-  params: {top_k: 10}
-  also_run: [nn_knn.cosine]
+  params: {top_k: 10}             # UNSPECIFIED by Song (they define no per-token Top-k attack); kept for the retrieval lineage only
 models:
   - description: "embedding model Phi mapping inputs to low-dimensional vectors"
 dataset:
   description: "held-out text whose embeddings are observed by the adversary"
 metrics:
-  report: [top1_asr, top5_asr, top10_asr]
-  ks: [1, 5, 10]
+  # Song Sec 6.2 scores order-free recovery of the word SET by precision/recall/F1
+  # (METRIC-F1, multiset overlap). There is NO Top-k ASR in Song & Raghunathan.
+  report: [token_precision, token_recall, token_f1]
 fidelity:
   approximations:
     sampling: false
@@ -28,13 +28,19 @@ fidelity:
     early_stopping: false
     candidate_truncation: false
     approx_nearest_neighbor: false
-formula_refs: [NN-1, NN-2, NN-3, METRIC-ASR]
+formula_refs: [NN-1, NN-2, NN-3, METRIC-F1]
 resource_requirement: >-
-  Requires the target embedding model and a reference vocabulary embedding
-  matrix. The original paper also covers a white-box continuous-relaxation
-  optimisation (NN-3) that needs the full model + gradient access.
+  Song & Raghunathan's actual inversion (NN-3, white-box continuous relaxation,
+  Eq 5/7) needs the full embedding model plus gradient access and is NOT
+  implemented here. It is marked "not implemented" in docs/FORMULA_LEDGER.md and
+  recorded in docs/DEVIATIONS.md, never stubbed or faked. Only the geometric
+  nearest-neighbour retrieval (NN-1/NN-2) is implemented.
 notes: >-
-  Original KNN lineage. The simple nearest-neighbour retrieval is fully
-  implemented and verified; the broader white-box optimisation (softmax
-  continuous relaxation, NN-3) is documented in the ledger as the paper's
-  extended objective.
+  HONESTY NOTE: this config reproduces NO experiment from Song & Raghunathan
+  (CCS 2020). Their embedding inversion recovers the UNORDERED SET of words in a
+  sequence (Eq 3/5/7) and is scored by precision/recall/F1 (Sec 6.2, Table 1);
+  it defines no per-token Top-k nearest-neighbour attack and reports no Top-k
+  ASR. What runs here is the OSNIP-style single-token Euclidean retrieval (NN-1),
+  kept under the Song lineage only because OSNIP (App. C.1) cites Song for its
+  KNN. metrics.report therefore uses the set-based precision/recall/F1
+  (METRIC-F1); Song's white-box optimisation (NN-3) stays not-implemented.

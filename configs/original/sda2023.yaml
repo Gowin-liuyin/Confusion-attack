@@ -5,22 +5,65 @@ paper:
   title: "Decipherment as Regression: Solving Historical Substitution Ciphers by Learning Symbol Recurrence Relations"
   authors: "Kambhatla et al., Findings of EACL 2023"
   id: 2023.findings-eacl.160
-  section: "Recurrence encoding + causal LM, Eq. 1-2"
+  section: "Sec 3 recurrence encoding + causal LM (Eq. 1-2); Sec 4 model; Algorithm 1 homophones"
 attack:
   name: sda.sda2023
   variant: original_2023
-  params: {epochs: 20, beam_width: 100, num_train: 100000, homophonic: false}
+  # Paper scale (Sec 4.2): beam size 200; 1.2M synthetic simple-substitution
+  # ciphers with lengths up to 256; ~30 epochs over the data.
+  params:
+    epochs: 30
+    beam_width: 200
+    num_train: 1200000
+    homophonic: false
+    min_len: 16
+    max_len: 256
 cipher_types: ["1:1 substitution", "homophonic substitution"]
+encoding: recurrence            # first-appearance indices (ABACAD -> 1 2 1 3 1 4); NOT frequency rank
 dataset:
-  source: "Project Gutenberg (pgcorpus); public plaintext enciphered with random keys"
+  source: "1000 English books from Project Gutenberg (pgcorpus) + ~200k news-commentary v9 (WMT14 En-De)"
+  simple_substitution: {num_train: 1200000, lengths_up_to: 256, alphabet_letters: 26}
+  eval: "50 test ciphers lengths up to 128 (16/32/64) and beyond (128/256) from the Wikipedia 'History' article"
+  multilingual: "length-256 1:1 ciphers from the 13 languages of Aldarrab & May (2021)"
+  real_ciphers: ["TNA_SP106/5 (CharlesI_0096)", "BnF_fr2988_f01", "Zodiac-408", "Borg (Latin, 1:1)"]
+# Homophonic synthetic ciphers (Table 2): key ranges are #distinct cipher keys.
+homophonic_key_ranges:
+  - "30-45"
+  - "45-60"
+  - "30-85"
+homophonic_lengths: ["300-400", "300-700"]
+model:
+  architecture: "Transformer decoder-only causal LM"
+  layers: 12
+  attention_heads: 12
+  feed_forward_dim: 1536
+  trainable_params: "~23M"
+  char_embedding: "char-CNN + highway over the DIGIT STRINGS of each recurrence code (Kim et al. 2016)"
+  char_cnn_filters: [[1, 64], [2, 128], [3, 192], [4, 256]]
+  char_dim: 4
+  highway_layers: 2
+  seq2seq_baseline: "6-layer encoder-decoder (same settings) - the 2021-style target-only baseline"
 hyperparameters:
-  encoding: recurrence            # first-appearance indices; NOT frequency rank
-  model: "causal Transformer language model"
-  objective: "L_CLM = -log P(X) - log P(Y|X)   (both terms)"
-  decode: beam_search
+  objective: "L_CLM = -log P(X) - log P(Y|X)   (BOTH terms: reproduce the cipher, then the plaintext; Eq. 2)"
+  layout: "[REC] X [PLAIN] Y  with causal masking over BOTH source and target (Eq. 1)"
+  decode: "beam search, beam=200, output length matched to the ciphertext"
+  epochs: 30
+  train_hardware: "4xA6000, ~100 min/epoch; ~400 chars/s decode on a Titan RTX"
 metrics:
-  report: [symbol_error_rate, decode_accuracy]
-  ks: [1]
+  report: [symbol_error_rate, decode_accuracy]   # SER = fraction of wrongly recovered symbols; decode_accuracy = 1 - SER
+  ks: [1]                                         # single-hypothesis decode (ASR@k == ASR@1)
+experimental_completions:
+  algorithm1_char_weight:
+    paper: "char_weight = int(freq / n); wsym = int(char_weight * #sym); num_sym = 1 if wsym==0 else wsym"
+    issue: "freq <= n so int(freq/n) == 0 for every char except one filling the whole sample -> NO homophones ever"
+    resolution: "read char_weight as the FRACTION freq/n (not truncated), the only reading under which Algorithm 1 flattens frequencies as described (Fig 2); int(.) and the wsym==0->1 floor kept verbatim"
+    code: "src/obfuscation_attacks/attacks/sda/encodings.py: allocate_homophones"
+unspecified:
+  - d_model                    # 12 heads x head_dim is implied but d_model not restated
+  - dropout
+  - learning_rate
+  - warmup_schedule
+  - batch_size
 fidelity:
   approximations:
     sampling: false
@@ -33,9 +76,14 @@ fidelity:
     approx_nearest_neighbor: false
 formula_refs: [SDA-2023-ENC, SDA-2023-OBJ]
 resource_requirement: >-
-  Paper-scale training needs a large Gutenberg-derived corpus and beam width
-  100. The recurrence encoding, the two-term CLM loss and homophonic ciphers are
-  implemented and verified on a small synthetic language.
+  resource_blocked (data-only). Paper-scale training needs a large
+  Gutenberg-derived corpus (1.2M simple-substitution ciphers, plus homophonic
+  sets with 30-85 keys) and beam width 200 (~100 min/epoch on 4xA6000, ~30
+  epochs). The recurrence encoding, the two-term CLM loss, the [REC] X [PLAIN] Y
+  layout, and homophonic ciphers (Algorithm 1) are implemented and verified
+  end-to-end on a small synthetic language, including a homophonic evaluation.
 notes: >-
   The causal-LM loss keeps BOTH terms (-log P(X) and -log P(Y|X)); recurrence
-  encoding (ABACAD -> 1 2 1 3 1 4) is distinct from frequency rank.
+  encoding (ABACAD -> 1 2 1 3 1 4) is distinct from frequency rank. Character
+  embeddings are a char-CNN + highway network over the recurrence-code digit
+  strings. Algorithm 1's char_weight is an EXPERIMENTAL_COMPLETION (see above).

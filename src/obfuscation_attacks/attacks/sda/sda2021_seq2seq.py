@@ -5,11 +5,14 @@ This is the 2021 lineage and must stay separate from the 2023 causal-LM method.
 Pipeline (FORMULA_LEDGER SDA-2021):
 
 1. Frequency-rank encode the ciphertext (``encodings.frequency_rank_encode``):
-   the source ``X`` is the sequence of competition frequency ranks, which erase
-   the key while preserving the frequency structure (SDA-2021-ENC).
+   the source ``X`` is the sequence of INJECTIVE frequency-rank codes (distinct
+   symbols -> distinct codes, count desc, first-appearance tiebreak), which erase
+   the key while preserving the frequency structure (SDA-2021-ENC, Fig 5).
 2. Train a character-level Transformer encoder-decoder on synthesised pairs
    ``(freq-rank(cipher) -> plaintext)``, where each training plaintext is drawn
    from the public reference corpus and enciphered with a fresh random 1:1 key.
+   Optional transcription-noise augmentation (2021 Sec 5.4) corrupts the training
+   cipher before encoding, mirroring the paper's noise-robust models.
 3. The training objective is the target-side cross-entropy only:
 
        L_Seq2Seq = L_TGT = -log P(Y | X)          (SDA-2021-OBJ)
@@ -17,13 +20,15 @@ Pipeline (FORMULA_LEDGER SDA-2021):
    i.e. there is NO source-reconstruction term (that is the 2023 method).
 4. Decode with beam search. Because the paper solves 1:1 ciphers where the
    plaintext and ciphertext have equal length, we length-match the decode to the
-   ciphertext (``force the model to generate tokens to match source length``),
-   which also makes the recovered sequence structurally consistent with the
-   input.
+   ciphertext (``force the model to generate tokens to match source length``).
+   The injective encoding makes equal cipher symbols share one source code, and
+   :func:`encodings.enforce_substitution_consistency` then recovers a
+   deterministic cipher->plain key by majority vote so equal cipher symbols
+   decode to equal plaintext (structural consistency).
 
 Token layout
 ------------
-Source: competition ranks ``1..R`` map to ids ``1..R``; ``SRC_PAD = 0``.
+Source: injective frequency codes ``1..R`` map to ids ``1..R``; ``SRC_PAD = 0``.
 Target: plaintext ids ``0..V-1``; ``BOS = V``, ``EOS = V+1``, ``PAD = V+2``.
 """
 
@@ -162,6 +167,8 @@ def synthesize_pairs(
     *,
     min_len: int = 4,
     max_len: int = 32,
+    noise_rate: float = 0.0,
+    noise_kinds: Sequence[str] = ("sub",),
 ) -> list[tuple[list[int], list[int]]]:
     """Make ``(freq-rank(cipher), plaintext)`` pairs from public plaintext.
 
@@ -170,6 +177,12 @@ def synthesize_pairs(
     frequency-rank encodes the cipher. (The 1:1 encoding is key-invariant, so the
     random key does not change ``X``; it is applied anyway to mirror the paper's
     "encipher public text with random keys" data-generation faithfully.)
+
+    When ``noise_rate > 0`` the cipher is corrupted with transcription noise
+    (2021 Sec 5.4) BEFORE frequency encoding, so the model learns to be robust to
+    it. The default ``noise_kinds=("sub",)`` keeps source and target the same
+    length; adding ``"ins"``/``"del"`` makes the source length diverge from the
+    target (the paper's space/noise-restoration setting, scored with TER).
     """
     pairs: list[tuple[list[int], list[int]]] = []
     corpus = [np.asarray(s, dtype=int) for s in corpus if len(s) > 0]
@@ -189,7 +202,12 @@ def synthesize_pairs(
             full_symbols, rng=rng, homophonic=False, cipher_alphabet_size=vocab_size
         )
         cipher = enc.apply_substitution(plain, key)
-        src = enc.frequency_rank_encode(cipher)  # ranks 1..R used directly as ids
+        if noise_rate > 0.0:
+            cipher = enc.apply_transcription_noise(
+                cipher, rate=noise_rate, rng=rng, kinds=noise_kinds,
+                alphabet=full_symbols,
+            )
+        src = enc.frequency_rank_encode(cipher)  # injective ranks 1..R used as ids
         pairs.append((src, plain.tolist()))
     return pairs
 
@@ -254,6 +272,8 @@ class SDA2021(Attack):
         num_train = int(p.get("num_train", 256))
         min_len = int(p.get("min_len", 4))
         max_len = int(p.get("max_len", 32))
+        noise_rate = float(p.get("noise_rate", 0.0))
+        noise_kinds = tuple(p.get("noise_kinds", ("sub",)))
         pairs = synthesize_pairs(
             [np.asarray(s, dtype=int) for s in ctx.reference_corpus],
             vocab_size,
@@ -261,6 +281,8 @@ class SDA2021(Attack):
             rng,
             min_len=min_len,
             max_len=max_len,
+            noise_rate=noise_rate,
+            noise_kinds=noise_kinds,
         )
         if not pairs:
             return AttackResult.not_applicable("reference corpus had no usable sequences")
@@ -295,11 +317,14 @@ class SDA2021(Attack):
                 opt.step()
                 final_loss = float(loss.detach())
 
-        recovered = self._decode(model, cfg, cipher, beam_width=int(p.get("beam_width", 5)))
+        recovered, mapping = self._decode(
+            model, cfg, cipher, beam_width=int(p.get("beam_width", 5))
+        )
         return AttackResult(
             recovered_token_ids=np.asarray(recovered, dtype=int),
             candidates=[[int(t)] for t in recovered],
             recovered_text=" ".join(str(int(t)) for t in recovered),
+            recovered_mapping={int(c): int(v) for c, v in mapping.items()},
             diagnostics={
                 "method": "seq2seq_frequency_rank_2021",
                 "objective": "L_Seq2Seq = -log P(Y|X)",
@@ -310,6 +335,8 @@ class SDA2021(Attack):
                 "final_train_loss": final_loss,
                 "cipher_len": int(cipher.size),
                 "src_vocab_size": cfg.src_vocab_size,
+                "noise_rate": noise_rate,
+                "structural_consistency": "majority-vote key (equal cipher symbol -> equal plaintext)",
             },
         )
 
@@ -321,7 +348,7 @@ class SDA2021(Attack):
         cipher: np.ndarray,
         *,
         beam_width: int,
-    ) -> list[int]:
+    ) -> tuple[list[int], dict[int, int]]:
         model.eval()
         src_ids = enc.frequency_rank_encode(cipher)
         n = len(src_ids)
@@ -342,7 +369,10 @@ class SDA2021(Attack):
         tokens, _, _ = length_matched_beam_search(
             step, num_steps=n, beam_width=beam_width, allowed_ids=allowed
         )
-        return tokens
+        # Recover a deterministic cipher->plain key so equal cipher symbols decode
+        # to equal plaintext (structural consistency; the key is 1:1 here).
+        consistent, mapping = enc.enforce_substitution_consistency(cipher, tokens)
+        return consistent, mapping
 
 
 __all__ = [

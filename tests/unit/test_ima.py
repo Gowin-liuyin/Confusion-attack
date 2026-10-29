@@ -1,8 +1,11 @@
 """Unit tests for the IMA family.
 
 (a) small-data overfit sanity for the Classify per-position MLP;
-(b) teacher-forcing behaviour of the Seq2Seq decoder (shapes + causal
-    conditioning on y_<t).
+(b) teacher-forcing behaviour of the Seq2Seq decoder (EOS-terminated targets,
+    shapes + causal conditioning on y_<t);
+(c) the Seq2Seq memory carries position (permuting memory rows changes the
+    output) and decoding length is produced by the model, not the input;
+(d) the Qwen2 inverter defaults to the paper-experiment embedding path.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from obfuscation_attacks.attacks.ima.classify import ClassifyInverter
-from obfuscation_attacks.attacks.ima.seq2seq import Seq2SeqDecoderInverter
+from obfuscation_attacks.attacks.ima.seq2seq import Seq2SeqDecoderInverter, greedy_decode
 from obfuscation_attacks.utils import seed_everything
 
 
@@ -52,11 +55,11 @@ def test_classify_overfit_small_data():
 @pytest.mark.unit
 @pytest.mark.neural
 def test_seq2seq_teacher_forcing_shapes_and_conditioning():
-    """Teacher forcing: shifted-BOS input, (B,N,V) logits, causal y_<t conditioning."""
+    """Teacher forcing: [BOS, y] input, [y, EOS] target, (B,N+1,V+1) logits, causal y_<t."""
     seed_everything(0)
     V, d, N = 6, 5, 4
     model = Seq2SeqDecoderInverter(
-        obf_dim=d, vocab_size=V, d_model=32, nhead=4, num_layers=2, max_len=16, seed=0
+        obf_dim=d, vocab_size=V, d_model=32, nhead=4, num_layers=2, max_len=16, max_mem_len=16, seed=0
     )
     model.eval()
 
@@ -64,14 +67,20 @@ def test_seq2seq_teacher_forcing_shapes_and_conditioning():
     memory = torch.as_tensor(rng.standard_normal((1, N, d)), dtype=torch.float32)
     y = torch.tensor([[1, 3, 2, 0]], dtype=torch.long)  # gold targets y_0..y_{N-1}
 
-    # teacher-forcing input is the right-shifted gold prefix with BOS prepended
+    # Decoder input is BOS followed by the full gold sequence (shifted right).
     tgt_in = model.teacher_forcing_inputs(y)
-    assert tuple(tgt_in.shape) == (1, N)
+    assert tuple(tgt_in.shape) == (1, N + 1)
     assert int(tgt_in[0, 0]) == model.bos_id
-    assert torch.equal(tgt_in[0, 1:], y[0, :-1])
+    assert torch.equal(tgt_in[0, 1:], y[0])
+
+    # Gold output is the sequence followed by EOS (teaches termination).
+    tgt_out = model.teacher_forcing_targets(y)
+    assert tuple(tgt_out.shape) == (1, N + 1)
+    assert torch.equal(tgt_out[0, :N], y[0])
+    assert int(tgt_out[0, N]) == model.eos_id
 
     logits = model(memory, tgt_in)
-    assert tuple(logits.shape) == (1, N, V)  # per-step vocabulary logits
+    assert tuple(logits.shape) == (1, N + 1, V + 1)  # content + EOS logits per step
 
     # Conditions on y_<t: change the token at input position 1 (= y_0). Output
     # position 0 attends only to [BOS] and must be unchanged; output position 1
@@ -84,24 +93,73 @@ def test_seq2seq_teacher_forcing_shapes_and_conditioning():
 
     # Causal masking the other way: changing the LAST input token affects only
     # the last output position, never earlier ones.
+    last = tgt_in.shape[1] - 1
     tgt_b = tgt_in.clone()
-    tgt_b[0, N - 1] = (int(tgt_in[0, N - 1]) + 1) % V
+    tgt_b[0, last] = (int(tgt_in[0, last]) + 1) % V
     logits_b = model(memory, tgt_b)
-    assert (logits[0, : N - 1] - logits_b[0, : N - 1]).abs().max() < 1e-6
-    assert (logits[0, N - 1] - logits_b[0, N - 1]).abs().max() > 1e-4
+    assert (logits[0, :last] - logits_b[0, :last]).abs().max() < 1e-6
+    assert (logits[0, last] - logits_b[0, last]).abs().max() > 1e-4
 
 
 @pytest.mark.unit
 @pytest.mark.neural
-def test_seq2seq_greedy_decode_length_and_range():
-    """Greedy decode yields exactly N in-vocabulary token ids (no BOS leakage)."""
-    from obfuscation_attacks.attacks.ima.seq2seq import greedy_decode
+def test_seq2seq_memory_carries_position_signal():
+    """Permuting the memory ROWS changes the logits: the memory is order-aware.
 
+    This is the fix for the defect where ``mem = mem_proj(memory)`` made
+    cross-attention a set operation (permuting memory barely moved the logits),
+    so the decoder could not order its predictions.
+    """
     seed_everything(0)
-    V, d, N = 6, 5, 4
-    model = Seq2SeqDecoderInverter(obf_dim=d, vocab_size=V, d_model=32, max_len=16, seed=0)
+    V, d, M = 6, 5, 4
+    model = Seq2SeqDecoderInverter(
+        obf_dim=d, vocab_size=V, d_model=32, nhead=4, num_layers=2, max_len=16, max_mem_len=16, seed=0
+    ).eval()
     rng = np.random.default_rng(1)
-    memory = rng.standard_normal((N, d))
-    out = greedy_decode(model, memory, N)
-    assert out.shape == (N,)
-    assert out.min() >= 0 and out.max() < V  # BOS id (== V) never emitted
+    memory = torch.as_tensor(rng.standard_normal((1, M, d)), dtype=torch.float32)
+    tgt_in = torch.tensor([[model.bos_id, 1, 2]], dtype=torch.long)
+
+    logits = model(memory, tgt_in)
+    perm = [M - 1 - i for i in range(M)]  # reverse the memory rows (non-trivial)
+    logits_perm = model(memory[:, perm, :], tgt_in)
+    assert (logits - logits_perm).abs().max() > 1e-3  # order matters now
+
+
+@pytest.mark.unit
+@pytest.mark.neural
+def test_seq2seq_greedy_decode_variable_length_and_range():
+    """Greedy decode: content-only ids, bounded by the cap not the memory length."""
+    seed_everything(0)
+    V, d = 6, 5
+    model = Seq2SeqDecoderInverter(
+        obf_dim=d, vocab_size=V, d_model=32, max_len=16, max_mem_len=16, seed=0
+    )
+    rng = np.random.default_rng(1)
+
+    out = greedy_decode(model, rng.standard_normal((4, d)), max_len=4)
+    assert out.ndim == 1
+    assert out.size <= 4  # never longer than the cap
+    if out.size:
+        assert out.min() >= 0 and out.max() < V  # BOS/EOS (>= V) never emitted
+
+    # Output length is produced by the model (EOS), not read from the input: a
+    # length-7 memory with cap 5 yields at most 5 tokens, i.e. fewer than the
+    # memory length.
+    out_long = greedy_decode(model, rng.standard_normal((7, d)), max_len=5)
+    assert out_long.size <= 5
+
+
+@pytest.mark.unit
+@pytest.mark.neural
+def test_qwen2_default_objective_is_embedding_regression():
+    """Default objective is the paper-experiment embedding path; CE is the alt."""
+    from obfuscation_attacks.attacks.ima.qwen2_aloepri import Qwen2AloePriInverter
+
+    assert Qwen2AloePriInverter().objective == "embedding"
+    assert Qwen2AloePriInverter(objective="embedding").objective == "embedding"
+    assert Qwen2AloePriInverter(objective="token_index").objective == "token_index"
+    # legacy aliases keep working and map to the right canonical path
+    assert Qwen2AloePriInverter(objective="mse").objective == "embedding"
+    assert Qwen2AloePriInverter(objective="ce").objective == "token_index"
+    with pytest.raises(ValueError):
+        Qwen2AloePriInverter(objective="bogus")

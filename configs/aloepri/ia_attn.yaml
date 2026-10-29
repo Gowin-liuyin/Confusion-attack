@@ -1,17 +1,39 @@
 name: aloepri_ia_attn
 mode: full
 seed: 0
-paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (Attn-IA)"}
-attack: {name: ia.attn, variant: aloepri, params: {block_size: 2}}
+paper:
+  title: "AloePri (Towards Privacy-Preserving LLM Inference via Covariant Obfuscation)"
+  id: 2603.01499v2
+  section: "Appendix D.1 (Attn-IA), Section 5.2.3 + Algorithm 2 (attention obfuscation), Table 2 (IA), Table 10 (params)"
+attack: {name: ia.attn, variant: aloepri, params: {block_size: 2, pairing: adjacent}}
+precondition: >-
+  The whitening invariant  e (Qj^T Qj)^-1 e^T = etilde (Qtilde_j^T Qtilde_j)^-1 etilde^T
+  is derived while IGNORING head and block permutation, and is EXACT only at alpha_e = 0
+  (Wstar_embed = W_e). This experiment uses the paper's ACTUAL alpha_e = 1.0 (Table 10,
+  row "Tab. 2,6,7"), so recovery here is an ABLATION: AloePri's defense is additive
+  embedding noise (alpha_e = 1.0) PLUS permutation over attention heads and RoPE blocks,
+  which together break the per-block consistency the invariant relies on (IA TTRSR 5.95%).
 defense:
-  block_structure: "RoPE 2x2 blocks of query/key weights"
-  note: "AloePri further applies head and block permutation to break the block-wise consistency the invariant needs."
-  privacy: {alpha_e: 1.0, alpha_h: 0.2, lambda: 0.3, expansion_h: 128, beta: 8, gamma: 1.0e-3}
+  block_structure: "RoPE 2x2 blocks of query/key weights (Algorithm 2: rotary R_qk + scaling H_qk, an invertible 2x2 map per block)"
+  head_block_permutation: "inter-head permutation (tau_kv, tau_group) and dynamic-window block permutation Zhat_block are applied on top of the noise"
+  privacy: {alpha_e: 1.0, alpha_h: 0.2, lambda: 0.3, expansion_h: 128, beta: 8, gamma: 1.0e-3}   # Table 10, row "Tab. 2,6,7"
+params_note:
+  pairing: "adjacent = RoPE columns (2j, 2j+1) [default]; half_split = the HuggingFace rotate_half layout, columns i and i+d_head/2"
+  block_size: "2-column RoPE blocks; a partial final block (width not a multiple of 2) is rejected, not silently used"
+  key_side: "if W_key blocks (K / K_obf) are exposed they are used in addition to the query blocks"
+  singular_blocks: "singular / ill-conditioned Gram blocks are SKIPPED (no pseudo-inverse); if no block is invertible the attack reports not_applicable"
+  multi_head_layer: "query/key weights may be stacked (heads/layers, tokens, d_head); every valid block across heads/layers is concatenated into one per-token invariant vector"
 models: [Qwen2.5-14B-Instruct]
-dataset: {description: "private tokens; mapping recovery"}
-metrics: {report: [mapping_top1_accuracy, ttrsr], ks: [1, 5, 10]}
+dataset: {description: "private tokens mapped to obfuscated tokens by a secret permutation Pi; the attack recovers that mapping"}
+metrics: {report: [mapping_top1_accuracy, cosine_similarity], ks: [1, 5, 10]}
 fidelity:
   approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
 formula_refs: [IA-ATTN-1]
-resource_requirement: "Requires the target LLM's query projections per head/block; not available locally."
-notes: "Singular query Gram blocks are SKIPPED (no pseudo-inverse); the whitening invariant is verified under invertible block transforms."
+resource_requirement: "Requires the target LLM's per-head query (and optionally key) projections across layers; not available locally."
+notes: >-
+  Attn-IA is a MAPPING attack, so the scorer emits mapping accuracy, not the positional
+  ttrsr (dropped for the same reason as Gate-IA); cosine_similarity is AloePri's CosSim
+  privacy metric (Table 2, 0.40 for IA). The whitening invariant, the singular-block skip
+  (no pseudo-inverse), both RoPE pairings, key-side use, stacked multi-head input, the
+  partial-block rejection, and the head-permutation defense are verified in
+  tests/mathematical/test_ia_math.py.

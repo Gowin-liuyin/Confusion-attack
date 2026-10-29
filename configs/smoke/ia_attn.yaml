@@ -3,9 +3,11 @@ mode: smoke
 seed: 0
 attack:
   name: ia.attn
-  params: {block_size: 2}
+  params: {block_size: 2, pairing: adjacent}   # adjacent RoPE blocks match the synthetic scenario's column layout
 scenario:
   name: ia_attn
   params: {n_tokens: 24, block: 2, num_blocks: 4}
 metrics: {ks: [1, 5, 10]}
-notes: Attn-IA whitening quadratic-form invariant smoke test (AloePri).
+notes: >-
+  Attn-IA whitening quadratic-form invariant smoke test (AloePri); exercises the
+  adjacent-pairing path with singular blocks skipped (no pseudo-inverse).

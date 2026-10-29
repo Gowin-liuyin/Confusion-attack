@@ -5,21 +5,32 @@ paper:
   title: "InvBERT: Reconstructing Text from Contextualized Word Embeddings by Inverting the BERT Pipeline"
   authors: "Kugler et al."
   id: arXiv:2109.10104
-  section: "Section 3.1 (WB/GB/BB), Section 4.2 (Classify / Seq2Seq)"
+  section: "Sec. 3.1 (WB/GB/BB), Sec. 3.2 (Classify=GB, Seq2Seq=BB), Sec. 4.2 (models), Sec. 4.3 (metrics)"
 attack:
+  # Classify is the GB attack and Seq2Seq is the BB attack:
+  # "We call our GB attack InvBert Classify and our BB attack InvBert Seq2Seq" (Sec. 3.2, line 235).
+  # The runner supports attack.runs to bundle both inverters in one config.
   runs:
-    - {name: ima.classify, variant: original, params: {knowledge: GB, epochs: 50, lr: 0.0001}}
-    - {name: ima.seq2seq, variant: original, params: {epochs: 50, lr: 0.0001}}
-knowledge_settings: [WB, GB, BB]   # white / gray / black box
+    - {name: ima.classify, variant: original, params: {knowledge: GB}}   # GB: tokenizer known
+    - {name: ima.seq2seq,  variant: original, params: {}}                 # BB: custom tokenizer, CTE memory
+knowledge_settings: [WB, GB, BB]   # white / gray / black box (Sec. 3.1)
 models:
-  - BERT (contextualized word embeddings; invert the BERT pipeline)
+  - BERT (contextualized word embeddings; invert the BERT pipeline, Sec. 4.2)
 dataset:
-  source: "AO3 fan-fiction corpus (public); strict train/test isolation"
+  source: "AO3 fan-fiction + Project Gutenberg (public); strict train/eval isolation (Sec. 4.1)"
 hyperparameters:
-  optimizer: AdamW
-  loss: cross_entropy
+  optimizer: AdamW                 # "We utilize AdamW as an optimizer" (Sec. 4.2, line 397)
+  loss: cross_entropy              # "and the basic cross-entropy loss" (Sec. 4.2, line 397)
+  # UNSPECIFIED: InvBERT states "we ... do not perform any hyperparameter optimization"
+  # and "use ... the identical hyperparameter settings" (Sec. 4.2, lines 399-400); the paper
+  # reports no epoch count or learning rate, so none are fixed here. The attack defaults are
+  # engineering choices used only for the smoke scenario, not paper values.
+  epochs: UNSPECIFIED
+  learning_rate: UNSPECIFIED
 metrics:
-  report: [token_accuracy, exact_match, token_f1]
+  # InvBERT evaluates "the 3-gram, 4-gram, and sentence precision in addition to the BLEU
+  # metric" and prefers "complete sentence accuracy" (Sec. 4.3, lines 407-411).
+  report: [ngram_precision_3, ngram_precision_4, bleu, sentence_accuracy]
   ks: [1]
 fidelity:
   approximations:
@@ -33,9 +44,12 @@ fidelity:
     approx_nearest_neighbor: false
 formula_refs: [IMA-CE-1, IMA-CLS-1, IMA-S2S-1]
 resource_requirement: >-
-  Requires the full BERT encoder and a large public corpus to train the
-  inverters. The architecture and losses are implemented; training at paper
-  scale is not run on the local GPU.
+  Requires the full BERT encoder and a large public corpus (AO3/Gutenberg) to train the
+  inverters. The architecture and losses are implemented; training at paper scale is not
+  run on the local GPU.
 notes: >-
-  Data isolation enforced: the evaluated text is never in the inverter's
-  training corpus (asserted in regression tests).
+  Classify = GB (per-position MLP; tokenizer known). Seq2Seq = BB (custom attacker tokenizer,
+  complete-sentence CTEs as order-aware decoder memory, variable-length decode until EOS).
+  Hyperparameters are UNSPECIFIED by the paper (no tuning, no reported epochs/lr). Data
+  isolation is enforced: the evaluated text is never in the inverter's training corpus
+  (asserted in the regression tests).

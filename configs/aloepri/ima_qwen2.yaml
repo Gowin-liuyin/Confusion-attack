@@ -1,23 +1,47 @@
 name: aloepri_ima_qwen2
 mode: full
 seed: 0
-paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (IMA), Section 7.2 Table 2"}
+paper: {title: "AloePri", id: 2603.01499v2, section: "App. D.1 (IMA, lines 1640-1644), Table 10 (lines 1664-1680), Table 2 (line 806)"}
 attack:
   name: ima.qwen2_aloepri
   variant: aloepri
-  params: {objective: ce, epochs: 10, lr: 0.0003}
+  # Paper experiment objective = invert "to plaintext token embeddings" (App. D.1, line 1644).
+  # 'token_index' is the clearly-labelled CE alternative (App. D.1 "or token indices", line 1643).
+  params: {objective: embedding}
 inverter:
   backbone: Qwen2
-  num_decoder_layers: 2          # FIXED by the paper
-  num_attention_heads: 8         # FIXED by the paper
-  inverts: "obfuscated embeddings -> plaintext token embeddings or token indices"
+  num_decoder_layers: 2          # FIXED by the paper (App. D.1 "2 decoder layers", line 1644)
+  num_attention_heads: 8         # FIXED by the paper (App. D.1 "8 attention heads", line 1644)
+  num_key_value_heads: UNSPECIFIED  # ASSUMPTION: not given in App. D.1; we assume MHA (= 8 attention heads)
+  inverts: "obfuscated embeddings -> plaintext token embeddings (experiment) | token indices (alt)"
+objective:
+  default: embedding             # regress to clean plaintext token embeddings (the paper experiment)
+  loss: mse                      # implementation choice ONLY; AloePri does not specify the inversion loss
+  loss_note: "AloePri states the embedding target, not the loss; MSE is NOT claimed as AloePri's objective"
+  alternative: token_index       # cross-entropy over token indices (App. D.1 'or token indices')
+mechanism:
+  # AloePri obfuscation hyperparameters that GENERATE the training pairs (Table 10, Tab.2/6/7 row).
+  note: "these define how the attacker synthesises obfuscated embeddings; they are not inverter knobs"
+  alpha_e: 1.0                   # embedding-layer noise coefficient
+  alpha_h: 0.2                   # model-head noise coefficient
+  lambda: 0.3                    # key-matrix coefficient
+  h: 128                         # expansion size
+  beta: 8                        # attention block-permutation parameter
+  gamma: 1.0e-3                  # attention block-permutation parameter
 training:
-  data: "public training dataset, obfuscated with the known AloePri mechanism (train/test isolated)"
-  loss: cross_entropy            # token-index path; MSE is an optional, non-claimed alternative
+  data: "public training dataset, obfuscated with the known AloePri mechanism (train/eval isolated)"
+  # UNSPECIFIED: App. D.1 gives no inverter epoch count or learning rate for IMA; none fixed here.
+  epochs: UNSPECIFIED
+  learning_rate: UNSPECIFIED
 models: [Qwen2.5-14B-Instruct]
-metrics: {report: [ttrsr, cosine_similarity], ks: [1, 5, 10]}
+metrics: {report: [ttrsr, cosine_similarity], ks: [1, 5, 10]}   # AloePri Table 2 reports IMA TTRSR=0.0, CosSim=0.36
 fidelity:
   approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
-formula_refs: [IMA-CE-1]
+formula_refs: [IMA-QWEN2, IMA-MSE, IMA-CE-1]
 resource_requirement: "Requires AloePri-obfuscated embeddings of the target LLM and a public corpus to train the 2-layer/8-head Qwen2 inverter at scale."
-notes: "The inverter is asserted to be exactly 2 decoder layers / 8 attention heads; data isolation enforced."
+notes: >-
+  Inverter asserted to be exactly 2 decoder layers / 8 attention heads (App. D.1).
+  num_key_value_heads=8 is an UNSPECIFIED assumption (= attention heads, standard MHA), not a paper value.
+  Paper-experiment objective = embedding regression; the MSE loss is an implementation choice and is
+  NOT claimed to be AloePri's. Against AloePri, faithful IMA recovery is ~chance (Table 2 TTRSR=0.0).
+  Data isolation enforced.

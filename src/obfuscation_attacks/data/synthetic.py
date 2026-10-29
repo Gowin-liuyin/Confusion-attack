@@ -116,24 +116,43 @@ def build_vma_autoregressive_scenario(
 
 
 # ---------------------------------------------------------------------------
-# VMA B3 - OSNIP projection (hidden-state candidate pool + L1)
+# VMA B3 - OSNIP vocabulary-matching (autoregressive L1 replay)
 # ---------------------------------------------------------------------------
 def build_vma_osnip_scenario(
-    *, vocab: int = 50, d: int = 12, n: int = 10, noise: float = 0.02,
+    *, vocab: int = 50, d: int = 12, n: int = 10, layers: int = 2, noise: float = 0.02,
     stopword_frac: float = 0.3, seed: int = 0,
 ) -> Scenario:
+    # OSNIP's vocabulary-matching attack (App. C.2 / Sec 4.1) reconstructs the
+    # sequence AUTOREGRESSIVELY: at each step it replays the clean model on
+    # [xhat_<i, v] for every token v, takes the layer-l hidden state, and picks
+    # the L1-nearest to the observed (perturbed) state. The scenario therefore
+    # exposes a real causal model to replay (MODEL_REPLAY) plus the observed,
+    # slightly perturbed layer-l states (HIDDEN_STATES) - not a static pool.
+    from ..models import CausalToyModel
+
+    model = CausalToyModel(vocab_size=vocab, hidden_size=d, num_layers=layers, seed=seed)
     rng = np.random.default_rng(seed)
-    pool = rng.standard_normal((vocab, d))  # per-token layer-l reference reps
     ids = rng.integers(0, vocab, size=n)
-    target = pool[ids] + noise * rng.standard_normal((n, d))
+    layer = layers
+    target = model.causal_hidden_states(ids, layer)
+    if noise:
+        target = target + noise * rng.standard_normal(target.shape)
+
+    def replay_fn(token_ids):
+        return model.causal_hidden_states(token_ids, layer)
+
     # Mark a subset of the vocabulary as stop words -> content_mask for Clean ASR.
     num_stop = max(1, int(stopword_frac * vocab))
     stop_ids = set(rng.choice(vocab, size=num_stop, replace=False).tolist())
     content_mask = np.array([int(t) not in stop_ids for t in ids], dtype=bool)
-    scheme = GenericScheme("osnip_projection", frozenset({Capability.HIDDEN_STATES}))
+    scheme = GenericScheme(
+        "osnip_projection",
+        frozenset({Capability.HIDDEN_STATES, Capability.MODEL_REPLAY}),
+        replay_fn=replay_fn,
+    )
     sample = AttackSample(
-        tokenizer_id="toy", model_id="toy", seq_len=n, vocab_size=vocab, layer=1,
-        obfuscated_hidden_states=target, reference_embeddings=pool,
+        tokenizer_id="toy", model_id="toy", seq_len=n, vocab_size=vocab, layer=layer,
+        obfuscated_hidden_states=target,
         plaintext_token_ids=ids, content_mask=content_mask,
         text_source="synthetic", data_split="eval",
         meta={"noise": noise, "stop_ids": sorted(stop_ids)},

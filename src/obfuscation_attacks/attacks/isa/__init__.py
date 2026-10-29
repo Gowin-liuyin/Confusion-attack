@@ -12,12 +12,18 @@ Modules:
 
 * ``er``            - Embedding Recovery (original): optimize the dummy
   embeddings directly with ``L_inv = L_im + lambda * L_dm`` (Eq. 3), where
-  ``L_dm`` is the random-Gaussian-network distribution-matching penalty.
-* ``tbs``           - Token Basis Selection (original): optimize a low-dim
-  coefficient over the SVD basis of ``w_in`` with ``what = arctan(z @ B_r)``.
+  ``L_dm`` is the random-Gaussian-network distribution-matching penalty
+  (**mean**-matching only, phi and the real batch resampled every step).
+* ``tbs``           - Token Basis Selection (original): optimize the projection
+  ``z`` over the **full** ``d_in`` orthogonal basis ``B`` of ``w_in`` with
+  ``what = alpha * arctan(z @ B)`` (``alpha = 5/pi``); ``B = V`` (unbiased, the
+  paper default) or ``B = V^T``. No low-rank truncation.
 * ``aloepri_state`` - AloePri App. D.1 State1/State2 adaptation: generic
-  state-matching optimization (``L_im`` only, random init); does not claim to
-  reproduce ER or TBS in full.
+  state-matching optimization (``L_im`` only, random init); targets HiddenState
+  and honestly reports AttnScore as not implemented; does not claim to reproduce
+  ER or TBS in full.
+
+All three optimize with AdamW (ISA Sec. 5.1) over a frozen model.
 
 Importing this package registers all three attacks in the global registry.
 """

@@ -5,43 +5,83 @@ paper:
   title: "Hidden No More: Attacking and Defending Private Third-Party LLM Inference"
   authors: "Thomas et al., ICML 2025"
   id: arXiv:2505.18332
-  section: "Section 5 (vocabulary-matching), Algorithms 1-5, Appendix D (epsilon thresholds)"
+  section: "Section 4 (Algorithm 1), Section 5 + Algorithms 4-6 (permuted reversal), Appendix D (epsilon Tables 9-12)"
 attack:
   name: vma.autoregressive
   variant: original
   params:
-    epsilon: null          # per-layer L1 threshold (paper Appendix D); null => pure argmin
-    sorted_l1: false        # set true for hidden-dim / factorized-2D permutation
+    epsilon: null            # per-layer L1 threshold (Appendix D); null => pure global argmin
+    permutation: none        # none | hidden_dimension | sequence_dimension | factorized_2d
+    sorted_l1: false         # alias: true selects hidden_dimension (Algorithm 5)
+    # Proposal ordering hook (Algorithm 1 line 3, V_ordered = argsort(P(xhat))).
+    # The epsilon early-accept is only applied when a proposal ordering is
+    # supplied; otherwise the attack falls back to pure global argmin (it never
+    # substitutes token-id order for the proposal order).
+    proposal_order: null     # precomputed ordered vocabulary ids, or
+    proposal_fn: null        # callable prefix -> ordered vocabulary ids
+proposal_model: "the attacked model itself (paper Sec 4.4, line 225): V_ordered = argsort(P(xhat))"
 models:
   - Gemma-2-2B-IT
   - Llama-3.1-8B-Instruct
-permutation_types:          # paper evaluates these defence permutations
-  - none
-  - sequence_dimension      # permutation of the N rows (space N!)
-  - hidden_dimension        # permutation of the d columns -> use sorted-L1 (space d!)
-  - factorized_2d           # rows + columns (space N!(d!)^N)
-proposal_model: "ordered vocabulary from a proposal model P(x) (argsort)"
-hyperparameters:
-  l1_threshold_epsilon: "per-layer optimal thresholds, Appendix D Tables 9-12"
+experimental_setup:                 # paper Sec 4.4, lines 224-241 (transcribed)
+  dataset: FineWeb-Edu (Penedo et al. 2024)
+  data_split: CC-MAIN-2024-10       # postdates the models' training cutoff -> unseen by the proposal model
+  epsilon_tuning: "ternary search on a 50-prompt FineWeb training set, per layer, per permutation type"
+  eval_prompts: 1000                # held-out prompts
+  layers: [1, 6, 11, 16, 21, 26]    # every fifth layer (Gemma-2-2B-IT); Llama-3.1-8B also reports layer 32
+  prompt_truncation_tokens: 50      # PAPER's own compute setting (not an approximation we introduced)
+  prompt_truncation_note: >-
+    The paper truncates each evaluation prompt to a maximum of 50 tokens for
+    compute (lines 238-239); it reports (lines 240-241) that small-scale
+    experiments with prompts over 200 tokens generalise. This is the paper's
+    setting, reproduced verbatim - NOT a shortcut introduced here.
+permutation_types:                  # paper Section 5 / Algorithms 4-6
+  - none                            # Algorithm 1: plain L1, position i matched to h_i
+  - sequence_dimension              # Algorithm 4: N rows permuted; match remaining rows, remove (space N!)
+  - hidden_dimension                # Algorithm 5: columns permuted; sorted-L1 (space (d!)^N)
+  - factorized_2d                   # Algorithm 6: rows + columns; sorted-L1 over remaining rows (space N!(d!)^N)
+optimal_epsilon:                    # Appendix D Tables 9-12: per-layer ternary-searched L1 thresholds
+  note: "Gemma-2-2B-IT has 26 layers; Llama-3.1-8B-Instruct additionally reports layer 32. '-' = not applicable."
+  no_permutation:                   # Table 9
+    layers:      [1,    6,    11,    16,    21,    26,   32]
+    gemma_2_2b:  [22.0, 70.0, 204.0, 293.0, 400.0, 318.0, null]
+    llama_31_8b: [0.6,  7.1,  18.3,  29.0,  76.0,  156.0, 150.0]
+  sequence_dimension:               # Table 10
+    layers:      [1,    6,    11,    16,    21,    26,   32]
+    gemma_2_2b:  [12.8, 72.6, 229.0, 301.0, 385.0, 220.0, null]
+    llama_31_8b: [1.4,  3.3,  7.4,   7.4,   26.6,  29.6,  105.0]
+  hidden_dimension:                 # Table 11
+    layers:      [1,    6,    11,   16,   21,    26,   32]
+    gemma_2_2b:  [12.5, 25.0, 45.0, 73.0, 118.0, 61.0, null]
+    llama_31_8b: [0.5,  3.5,  3.7,  5.2,  6.3,   9.8,  30.0]
+  factorized_2d:                    # Table 12
+    layers:      [1,    6,    11,   16,   21,    26,   32]
+    gemma_2_2b:  [21.0, 26.0, 47.0, 69.0, 118.0, 51.0, null]
+    llama_31_8b: [0.3,  3.0,  9.0,  9.0,  14.0,  14.0, 45.0]
 metrics:
   report: [exact_decode_rate, token_ttrsr]
   ks: [1]
 fidelity:
   approximations:
     sampling: false
-    truncation: false        # the paper truncates eval prompts for compute; we keep full length
+    truncation: false        # the 50-token cap is the PAPER's setting (see experimental_setup), not a shortcut we added
     quantization: false
     low_precision: false
     pruning: false
-    early_stopping: false    # epsilon early-accept is the paper's own rule, modelled exactly
+    early_stopping: false    # epsilon early-accept is the paper's own rule (Algorithm 1), modelled exactly
     candidate_truncation: false
     approx_nearest_neighbor: false
 formula_refs: [VMA-B1-1, VMA-B1-2, METRIC-TTRSR]
 resource_requirement: >-
   Requires Gemma-2-2B-IT / Llama-3.1-8B-Instruct with per-position hidden-state
-  replay over the whole vocabulary per token per position. Replaying |V|*N
-  forward passes for 8B models is infeasible on the local 8 GB GPU.
+  replay over the whole vocabulary per token per position (with the proposal
+  model ordering the vocabulary). Replaying |V|*N forward passes for 8B models is
+  infeasible on the local 8 GB GPU.
 notes: >-
-  Faithful original autoregressive VMA. The epsilon early-accept rule and the
-  sorted-L1 matcher for hidden-dim permutation are implemented; the causal
-  prefix recovery and sorted-L1 invariance are verified on the toy causal model.
+  Faithful original autoregressive VMA. Algorithm 1 (proposal-ordered epsilon
+  early-accept with global-argmin fallback), Algorithm 4 (sequence-dimension),
+  Algorithm 5 (hidden-dimension sorted-L1) and Algorithm 6 (factorized-2D) are
+  implemented and verified on the inline toy causal model. The epsilon early-
+  accept is applied ONLY in proposal order; without a proposal ordering the
+  attack falls back to pure global argmin (recorded in diagnostics) rather than
+  iterating in token-id order.

@@ -8,4 +8,8 @@ scenario:
   name: vma_weight
   params: {n: 10, m: 7, layers: 2}
 metrics: {ks: [1, 5, 10]}
-notes: Synthetic Y=Z1 X Z2 recovery smoke test (AloePri weight VMA).
+notes: >-
+  Synthetic Y=Z1 X Z2 recovery smoke test (AloePri weight VMA): RowSort + L1
+  nearest-neighbor matching recovers Z1 (noise-tolerant), then Z2 by column
+  matching, with per-layer majority voting. Duplicate rows (if present) are
+  reported as a partial result with candidate sets rather than a fake verified.

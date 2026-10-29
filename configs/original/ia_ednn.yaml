@@ -5,17 +5,25 @@ paper:
   title: "An Inversion Attack Against Obfuscated Embedding Matrix in Language Model Inference"
   authors: "Lin et al., EMNLP 2024"
   id: 2024.emnlp-main.126
-  section: "EDNN (Element-wise Differential Nearest Neighbour)"
+  section: "Section 3-4, Algorithm 1 (EDNN); Table 1 (token recovery accuracy)"
 attack:
   name: ia.ednn
   variant: original
   params: {top_k: 10}
-models:
-  - description: "language-model embedding matrix obfuscated by a glide reflection (l = 1*a, t = 1*b)"
+scheme:                               # the glide-reflection scheme being broken (Mishra et al. 2024 / SentinelLM)
+  obfuscation: "glide-reflection  e' = e - 2 (e.l / l.l) l + t,  with  l = 1*a,  t = 1*b"
+  random_values: "a_i, b_i ~ U[0, 1)   (Eq. 1 and its footnote)"
+  n_glide_iterations: 10              # Table 1: accuracy reported after 10 iterations of glide-reflection
+  attack_target: "the obfuscated AND fine-tuned embedding matrix (Algorithm 1 input Ehat_{d x M})"
+  token_encryption: "Blake2 per-key token encryption; tokens and embeddings are shuffled simultaneously (Sec 2.2)"
+models: [BERT, RoBERTa, mBERT]        # Table 1 (mBERT = BERTMultilingual), HuggingFace checkpoints
 dataset:
-  description: "observed obfuscated embeddings + a reference embedding dictionary"
+  tasks: ["GLUE (all tasks)", "CoNLL2003 NER", "XNLI In-language", "XNLI Zero-shot"]   # Table 1
+  description: "the fine-tuned model's obfuscated embedding matrix + the pretrained embedding matrix as the reference dictionary"
+  fine_tuning_hyperparameters: UNSPECIFIED   # paper reuses Mishra et al. 2024's setup; exact LR/epochs/batch not restated
+  split: UNSPECIFIED
 metrics:
-  report: [top1_asr, ttrsr]
+  report: [recovery_accuracy]         # paper's "Recovery acc": top-1 token recovery over the vocabulary (Table 1 = 100%)
   ks: [1, 5, 10]
 fidelity:
   approximations:
@@ -25,14 +33,17 @@ fidelity:
     low_precision: false
     pruning: false
     early_stopping: false
-    candidate_truncation: false
+    candidate_truncation: false       # recovery is argmin over the FULL vocabulary; top_k only sizes the reported candidate list
     approx_nearest_neighbor: false
 formula_refs: [IA-EDNN-1, IA-EDNN-2, IA-EDNN-3]
 resource_requirement: >-
-  Requires the obfuscated embedding matrix and a reference dictionary at the
-  target model's hidden size; tractable in principle but the target model's
-  obfuscated weights are not available here.
+  Requires BERT/RoBERTa/mBERT obfuscated-and-fine-tuned embedding matrices and the
+  matching pretrained embedding dictionary; tractable in principle but the target
+  model's obfuscated weights are not available on this machine.
 notes: >-
-  Faithful EDNN: the circular-left-shift (never drop the last coordinate)
-  difference representation and the all-equal-coordinate glide invariant are
-  implemented and verified, including a counterexample for a general reflection.
+  "Recovery accuracy" is the paper's vocabulary-level token-recovery rate (Table 1,
+  100% after 10 glide iterations); realized locally as top-1 (asr@1 / ttrsr) of the
+  per-token EDNN recovery. Faithful EDNN: the circular-left-shift difference
+  representation (last coordinate wraps, never dropped) and the all-equal-coordinate
+  (l = 1*a, t = 1*b) glide invariant are implemented and verified, with an
+  arbitrary-normal reflection counterexample, in tests/mathematical/test_ia_math.py.

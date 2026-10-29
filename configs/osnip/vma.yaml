@@ -4,11 +4,21 @@ seed: 42
 paper:
   title: "OSNIP: Breaking the Privacy-Utility-Efficiency Trilemma ..."
   id: 2601.22752v1
-  section: "Appendix C.2 (Vocabulary-Matching Attack Setup), Table 6"
+  section: "Section 4.1 (attack definition), Appendix C.2 (Vocabulary-Matching Attack Setup), Table 6"
 attack:
-  name: vma.osnip_projection    # project hidden states to vocab space, L1 match
+  name: vma.osnip_projection    # autoregressive L1-replay vocabulary matching (reuses Thomas et al. 2025)
   variant: osnip
   params: {top_k: 10, sorted_l1: false}
+  method: >-
+    Autoregressive reconstruction (paper Sec 4.1, lines 284-288): "the attacker
+    reconstructs the sequence autoregressively by selecting, at each step, the
+    vocabulary token whose hidden state is closest (in L1 distance) to the
+    perturbed representation, and feeds the output back for the next step." At
+    step i the clean model is replayed on [xhat_<i, v] for every vocabulary
+    token v; the layer-l hidden state is taken and the L1-nearest to the
+    observed perturbed state h_i is appended. No epsilon, no proposal model.
+  required_capabilities: [HIDDEN_STATES, MODEL_REPLAY]   # replay of the clean model is intrinsic to the attack
+  distinct_from_knn: "OSNIP's KNN attack (lines 280-283) ranks the vocabulary by Euclidean distance in EMBEDDING space; that is the NN family, not this hidden-state L1 attack."
 models:
   - Llama-3.2-1B
   - Llama-3.2-3B-Instruct
@@ -20,10 +30,15 @@ dataset:
     - {name: arc, source: allenai/ai2_arc, subsets: [ARC-Challenge, ARC-Easy]}
     - {name: sciq, source: allenai/sciq, format: "Scientific Question + 4 options (1 correct + 3 distractors), options shuffled"}
     - {name: wikitext, source: wikitext-103-raw-v1, filter: "length > 50 chars", cap: 150000}
-  pool_cap: 300000              # candidate pool capped at 300,000
+  text_pool_cap: 300000         # App. C.2 line 824: the merged datasets form a TEXT-SAMPLE pool capped at 300,000
+  text_pool_note: >-
+    The 300,000 cap is the pool of TEXT SAMPLES from which test instances are
+    drawn (App. C.2 "Pool Construction"); it is NOT a pool of candidate token
+    representations to match against. Candidate tokens come from replaying the
+    vocabulary autoregressively.
   length_filter: "20-512 characters"
-  test_set: 200                 # 200 distinct instances
-  keys_per_instance: 5          # 5 independent perturbations -> 1,000 reps/model
+  test_set: 200                 # 200 distinct instances (App. C.2 line 828)
+  keys_per_instance: 5          # 5 independent perturbations -> 1,000 reps/model (line 830)
   stop_words: "NLTK standard stopwords corpus (for Clean ASR)"
 layers: [1, 5, 10, 15, 20, 30, 39]   # layer-wise analysis (Table 6)
 metrics:
@@ -38,14 +53,18 @@ fidelity:
     low_precision: false
     pruning: false
     early_stopping: false
-    candidate_truncation: false        # the 300k pool is the paper's design, not a truncation we introduce
+    candidate_truncation: false        # the 300k pool is the paper's TEXT-sample design, not a truncation we introduce
     approx_nearest_neighbor: false
 formula_refs: [VMA-B3-1, METRIC-ASR, METRIC-TOTAL-CLEAN]
 resource_requirement: >-
-  Requires the four LLMs, a 300,000-entry candidate pool of per-token layer-l
-  representations, and 1,000 perturbed reps per model across seven layers. Not
+  Requires the four LLMs with autoregressive hidden-state replay over the whole
+  vocabulary per token per position, a 300,000-text-sample pool to draw 200
+  instances, and 1,000 perturbed reps per model across seven layers. Not
   feasible on the 8 GB local GPU.
 notes: >-
-  Faithful transcription of OSNIP Appendix C.2 (reuses Thomas et al. 2025 VMA in
-  a hidden-state projection form). Resource blocked here; algorithm verified via
-  synthetic scenarios + sorted-L1 math tests.
+  Faithful transcription of OSNIP Sec 4.1 / Appendix C.2: the vocabulary-
+  matching attack is the AUTOREGRESSIVE L1-replay attack of Thomas et al. 2025
+  (not a fixed per-token candidate-pool matcher). It shares the causal L1-replay
+  helper with B1 but stays its own class/variant and requires MODEL_REPLAY.
+  Resource blocked here; algorithm verified via the inline causal model in the
+  math tests (L1 and sorted-L1 under a hidden-dimension permutation).

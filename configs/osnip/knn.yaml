@@ -6,10 +6,9 @@ paper:
   id: 2601.22752v1
   section: "Appendix C.1 (KNN Attack Setup), Section 4.3, Table 5"
 attack:
-  name: nn_knn.euclidean        # OSNIP ranks vocabulary tokens by Euclidean distance
+  name: nn_knn.euclidean        # OSNIP ranks ALL vocabulary tokens by Euclidean (L2) distance only (App. C.1 / Sec 4.3)
   variant: original
   params: {top_k: 10}
-  also_run: [nn_knn.cosine]     # cosine reported as the direction-stable metric
 models:                         # OSNIP evaluates four open-source LLMs
   - Llama-3.2-1B
   - Llama-3.2-3B-Instruct
@@ -39,6 +38,10 @@ resource_requirement: >-
   states over 1,000 Alpaca samples. The 8 GB local GPU cannot host these models;
   full ranking over the entire vocabulary per token is exact but memory-heavy.
 notes: >-
-  Faithful transcription of OSNIP Appendix C.1. Not executed here (resource
-  blocked); the KNN algorithm and metrics are verified on synthetic scenarios
-  and math tests.
+  Faithful transcription of OSNIP Appendix C.1. OSNIP's KNN attack uses
+  Euclidean (L2) distance ONLY: App. C.1 / Sec 4.3 state the attacker "ranks all
+  vocabulary tokens by Euclidean distance", and Appendix C.3 calls KNN the L2
+  adversary. Cosine is not part of OSNIP, so no also_run cosine key is declared
+  here (and the runner ignores any also_run key regardless). Not executed here
+  (resource blocked); the KNN algorithm and metrics are verified on synthetic
+  scenarios and math tests.

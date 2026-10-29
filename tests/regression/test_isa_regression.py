@@ -5,6 +5,9 @@ recovered discrete tokens, re-embed and forward them through the frozen model to
 layer ``l``, and confirm the resulting state is genuinely closer to the target
 than the state of random token sequences. This checks the attack actually
 reduced the inversion objective (Eq. 1), not merely that it returned something.
+The random token sequences form a baseline; the recovered state must beat the
+*best* of many random controls by a clear margin, so the threshold is meaningful
+rather than trivially satisfied.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ pytestmark = [pytest.mark.regression, pytest.mark.neural]
 LAYER = 1
 TOKENS = [1, 5, 9, 13]
 N = len(TOKENS)
+VOCAB = 16
 
 
 def _cos_state_distance(a: np.ndarray, b: np.ndarray) -> float:
@@ -35,23 +39,23 @@ def _cos_state_distance(a: np.ndarray, b: np.ndarray) -> float:
 
 @pytest.fixture()
 def victim():
-    model = TorchToyModel(vocab_size=16, hidden_size=16, num_layers=2, seed=0).freeze()
+    model = TorchToyModel(vocab_size=VOCAB, hidden_size=16, num_layers=2, seed=0).freeze()
     target = model.hidden_states(TOKENS, layer=LAYER).numpy()
     ctx = AttackContext(
         granted=frozenset({Capability.HIDDEN_STATES}),
-        descriptor={"vocab_size": 16, "seq_len": N, "layer": LAYER},
+        descriptor={"vocab_size": VOCAB, "seq_len": N, "layer": LAYER},
         _obfuscated_hidden_states=target,
         attacker_model=model,
     )
     return model, target, ctx
 
 
-def _random_baseline(model, target):
+def _random_baseline(model, target, trials=64):
     """Distances to target of many random token sequences (the control group)."""
     rng = np.random.default_rng(12345)
     dists = []
-    for _ in range(24):
-        seq = rng.integers(0, 16, size=N).tolist()
+    for _ in range(trials):
+        seq = rng.integers(0, VOCAB, size=N).tolist()
         state = model.hidden_states(seq, layer=LAYER).numpy()
         dists.append(_cos_state_distance(state, target))
     return np.asarray(dists)
@@ -60,9 +64,11 @@ def _random_baseline(model, target):
 @pytest.mark.parametrize(
     "make_attack",
     [
-        pytest.param(lambda: ERAttack(seed=0), id="er-default"),
-        pytest.param(lambda: ERAttack(distance="l2", steps=400, seed=0), id="er-l2"),
+        pytest.param(lambda: ERAttack(seed=0), id="er-default-mse"),
+        pytest.param(lambda: ERAttack(distance="cos", steps=400, seed=0), id="er-cos"),
+        pytest.param(lambda: ERAttack(distance="l2", lambda_dm=1e-3, steps=400, seed=0), id="er-l2-dm"),
         pytest.param(lambda: TBSAttack(seed=0), id="tbs-default"),
+        pytest.param(lambda: TBSAttack(basis="vt", seed=0), id="tbs-vt"),
         pytest.param(lambda: AloePriStateAttack(seed=0), id="aloepri-default"),
     ],
 )
@@ -78,10 +84,14 @@ def test_recovered_tokens_reduce_state_distance(victim, make_attack):
     recovered_dist = _cos_state_distance(recovered_state, target)
 
     baseline = _random_baseline(model, target)
-    # Genuinely reduced the objective: closer than every random control, and far
-    # below their average.
+    # The random control group is genuinely far from the target (so the bar is
+    # not trivially met): a non-degenerate spread well above zero.
+    assert baseline.min() > 0.05
+    # Genuinely reduced the objective: strictly closer than EVERY random control,
+    # and by a clear margin below the best random draw (meaningful threshold).
     assert recovered_dist < baseline.min()
-    assert recovered_dist < baseline.mean()
+    assert recovered_dist < 0.5 * baseline.min()
+    assert recovered_dist < 0.25 * baseline.mean()
 
 
 def test_perfect_token_sequence_has_zero_distance(victim):

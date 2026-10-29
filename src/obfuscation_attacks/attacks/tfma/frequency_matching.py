@@ -84,7 +84,11 @@ class IndependentTFMA(Attack):
             order = np.argsort(cost, kind="stable")
             candidates[c] = order[:k].tolist()
             mapping[c] = int(order[0])
-            # count exact-cost ties with the winner (ambiguity, not broken by fiat)
+            # Tie rule (documented, not arbitrary): np.argsort(kind="stable")
+            # preserves the natural ascending-id order among equal costs, so the
+            # LOWEST token id wins an exact frequency tie. We also count how many
+            # tokens share the winner's cost so the ambiguity stays visible in
+            # diagnostics rather than being hidden.
             ties[c] = int(np.sum(cost == cost[order[0]]))
 
         return AttackResult(
@@ -94,6 +98,7 @@ class IndependentTFMA(Attack):
                 "method": "independent_nearest_frequency",
                 "num_observed_symbols": int(observed.size),
                 "symbols_with_frequency_ties": int(sum(1 for v in ties.values() if v > 1)),
+                "tie_rule": "stable argsort by |df|: lowest token id wins equal-frequency ties",
             },
         )
 
@@ -118,19 +123,31 @@ class GlobalAssignmentTFMA(Attack):
         # Cost matrix over observed cipher symbols x full vocab: (f_C(c) - f_R(t))^2
         cost = (f_C[obs][:, None] - f_R[None, :]) ** 2
         rows, cols = linear_sum_assignment(cost)
-        mapping = {int(obs[r]): int(cols[j]) for j, r in enumerate(rows)}
-        # candidates: for reporting Top-k we still rank per symbol by the same cost
+        row_to_assigned = {int(r): int(c) for r, c in zip(rows.tolist(), cols.tolist())}
+        mapping = {int(obs[r]): row_to_assigned[int(r)] for r in rows.tolist()}
         top_k = int(self.params.get("top_k", 100))
         k = min(top_k, vocab)
-        candidates = {}
+        candidates: dict[int, list[int]] = {}
         for i, c in enumerate(obs.tolist()):
-            order = np.argsort(cost[i], kind="stable")
-            candidates[c] = order[:k].tolist()
+            # Rank per symbol by the same (df)^2 cost, BUT place the globally
+            # ASSIGNED token first. Ranking by the per-symbol cost alone (the old
+            # behaviour) could put a different token at rank 1, so mapping_asr@1
+            # disagreed with the Hungarian top-1 accuracy this variant is meant
+            # to report. Putting the assignment first makes candidates[c][0] ==
+            # mapping[c]; the remaining tokens follow in ascending (df)^2 order.
+            order = np.argsort(cost[i], kind="stable").tolist()
+            assigned_tok = row_to_assigned.get(i)
+            if assigned_tok is None:
+                ranked = order
+            else:
+                ranked = [assigned_tok] + [t for t in order if t != assigned_tok]
+            candidates[c] = ranked[:k]
         return AttackResult(
             recovered_mapping=mapping,
             mapping_candidates=candidates,
             diagnostics={
                 "method": "hungarian_global_assignment",
                 "num_observed_symbols": int(obs.size),
+                "candidate_order": "assigned token first, then ascending (delta f)^2",
             },
         )

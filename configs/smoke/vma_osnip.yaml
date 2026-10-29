@@ -8,4 +8,12 @@ scenario:
   name: vma_osnip
   params: {vocab: 50, d: 12, n: 10, noise: 0.02}
 metrics: {ks: [1, 5, 10]}
-notes: OSNIP projection L1 matching smoke test with Total/Clean ASR split.
+notes: >-
+  OSNIP autoregressive L1-replay vocabulary-matching smoke test. NOTE: the
+  corrected attack is autoregressive and requires MODEL_REPLAY (it replays the
+  clean model on [xhat_<i, v]); the `vma_osnip` synthetic scenario in
+  src/.../data/synthetic.py (outside this change's allowed scope) exposes only
+  HIDDEN_STATES with a static reference pool and no replay function, so the
+  attack returns not_applicable here until that scenario is extended with a
+  replay_fn + MODEL_REPLAY. The algorithm itself is verified end-to-end on the
+  inline causal model in tests/mathematical/test_vma_math.py.

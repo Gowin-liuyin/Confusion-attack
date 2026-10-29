@@ -3,9 +3,14 @@ mode: smoke
 seed: 0
 attack:
   name: vma.autoregressive
-  params: {}
+  # Default params exercise Algorithm 1 (plain L1, pure global argmin, no
+  # epsilon). Set permutation to sequence_dimension / hidden_dimension /
+  # factorized_2d to exercise Algorithms 4 / 5 / 6.
+  params: {permutation: none}
 scenario:
   name: vma_autoregressive
   params: {vocab: 16, d: 8, n: 5, layers: 2}
 metrics: {ks: [1, 5, 10]}
-notes: Causal prefix L1 recovery smoke test (original Hidden No More VMA).
+notes: >-
+  Causal prefix L1 recovery smoke test (original Hidden No More VMA, Algorithm
+  1). The scenario grants MODEL_REPLAY + HIDDEN_STATES; recovery is exact.

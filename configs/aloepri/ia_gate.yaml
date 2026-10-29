@@ -1,17 +1,32 @@
 name: aloepri_ia_gate
 mode: full
 seed: 0
-paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (Gate-IA)"}
+paper:
+  title: "AloePri (Towards Privacy-Preserving LLM Inference via Covariant Obfuscation)"
+  id: 2603.01499v2
+  section: "Appendix D.1 (Gate-IA), Section 5.2.4 (FFN obfuscation), Table 2 (IA), Table 10 (params)"
 attack: {name: ia.gate, variant: aloepri, params: {top_k: 10}}
-precondition: "alpha_e = 0 (no embedding noise) - the Avg(e Wgate) = Avg(e~ W~gate) invariant is exact only then"
+precondition: >-
+  The invariant  Avg(e Wgate) = Avg(etilde Wtilde_gate)  is EXACT only at alpha_e = 0
+  (no embedding noise, so Wstar_embed = W_e). This experiment uses the paper's ACTUAL
+  setting alpha_e = 1.0 (Table 10, row "Tab. 2,6,7"), so running Gate-IA here is an
+  ABLATION against AloePri's embedding-noise defense - exactly the defense that drives
+  the IA result down to TTRSR 5.95% / CosSim 0.40 in Table 2.
 defense:
-  privacy: {alpha_e: 0.0, alpha_h: 0.2, lambda: 0.3, expansion_h: 128, beta: 8, gamma: 1.0e-3}
-  layers: "gate weights from multiple decoder layers stacked into the invariant vector"
+  gate_obfuscation: "Wtilde_gate = Qhat_gate Wgate Zhat_ffn (Sec 5.2.4); the gate key Qhat_gate cancels covariantly against the wider embedding key Phat_embed (d x (d+2h))"
+  privacy: {alpha_e: 1.0, alpha_h: 0.2, lambda: 0.3, expansion_h: 128, beta: 8, gamma: 1.0e-3}   # Table 10, row "Tab. 2,6,7"
+  layers: "all decoder layers (gate weights from every decoder layer are stacked into the invariant vector)"
 models: [Qwen2.5-14B-Instruct]
-dataset: {description: "private tokens; mapping recovery (TTRSR)"}
-metrics: {report: [mapping_top1_accuracy, ttrsr], ks: [1, 5, 10]}
+dataset: {description: "private tokens mapped to obfuscated tokens by a secret permutation Pi; the attack recovers that mapping"}
+metrics: {report: [mapping_top1_accuracy, cosine_similarity], ks: [1, 5, 10]}
 fidelity:
   approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
 formula_refs: [IA-GATE-1]
-resource_requirement: "Requires AloePri obfuscated gate weights and embeddings of the target LLM across decoder layers."
-notes: "The alpha_e=0 precondition is recorded; additive embedding noise breaks the invariant (paper's defence against Gate-IA)."
+resource_requirement: "Requires AloePri-obfuscated gate weights and embeddings of the target LLM across all decoder layers; not available locally."
+notes: >-
+  Gate-IA is a MAPPING attack, so the scorer emits mapping accuracy
+  (mapping_top1_accuracy / mapping_asr@k), NOT the positional ttrsr (which needs an
+  ordered token sequence); ttrsr was therefore dropped from report. cosine_similarity
+  is AloePri's CosSim privacy metric (Table 2, 0.40 for IA). The alpha_e=0 exactness
+  precondition and the alpha_e=1.0 noise defense are both recorded here and verified in
+  tests/mathematical/test_ia_math.py (wider-key transform: exact at alpha_e=0, broken at alpha_e>0).

@@ -8,14 +8,19 @@ re-implementation of plumbing. The pieces are:
   ``TorchToyModel`` (``ctx.attacker_model``); ISA is an optimization attack and
   cannot run without a model to back-propagate through.
 * :func:`state_distance` - the distance ``d`` of the inversion objective
-  ``xhat = argmin_{x'} d(h_l^{fA}(x'), h_l^{fV}(x))`` (ISA paper Eq. 1). Cosine
-  distance by default; squared-error ("l2", the paper's MSE) optional.
+  ``xhat = argmin_{x'} d(h_l^{fA}(x'), h_l^{fV}(x))`` (ISA paper Eq. 1). The
+  paper's *default* is the Mean Squared Error (MSE); cosine distance is the
+  documented alternative ("Common choices of d include Lp norm and cosine
+  distance", Sec. 4.2; "the default setting uses MSE as the distance metric",
+  Sec. 5.1).
 * :class:`RandomFeatureNet` + :func:`distribution_matching_loss` - the ER
-  distribution-matching penalty ``L_dm`` (ISA paper Eq. 3): a *fixed* random
-  Gaussian network used as a universal feature extractor, matching batch
-  statistics (mean and variance across the sequence positions) of the dummy
-  embeddings against real token embeddings. It is deliberately **not** a plain
-  L2/norm regulariser.
+  distribution-matching penalty ``L_dm`` (ISA paper Eq. 3):
+  ``L_dm = E_{phi ~ P_phi} || phi_bar(what) - phi_bar(w_in) ||^2`` where ``phi``
+  is a random Gaussian neural network used as a universal feature extractor and
+  ``phi_bar`` is the *average* (overline) of its features over an embedding
+  batch. It is deliberately **not** a plain L2/norm regulariser, and it is
+  **mean**-matching only (no variance term), with the random net ``phi`` and the
+  real-embedding batch resampled every step.
 * :func:`recover_tokens_by_cosine` - the second phase shared by ER/TBS/AloePri:
   pick, per row of the optimized embedding, the vocabulary token of highest
   cosine similarity with ``fA.embedding_matrix()`` (ISA Algorithm 1 line 11).
@@ -61,7 +66,7 @@ def freeze_model(model) -> None:
     """Fix the model weights for the whole optimization (ISA: weights are fixed).
 
     Only toggles ``requires_grad`` (no value change), so the model's parameters
-    are identical before and after an attack.
+    are identical before and after an attack and never receive a gradient.
     """
     if hasattr(model, "freeze"):
         model.freeze()
@@ -78,32 +83,45 @@ def as_target_tensor(target_np: np.ndarray) -> torch.Tensor:
     return torch.from_numpy(arr)
 
 
-def state_distance(a: torch.Tensor, b: torch.Tensor, kind: str = "cos") -> torch.Tensor:
-    """Distance ``d`` between two internal states (ISA Eq. 1 / L_im).
+def state_distance(a: torch.Tensor, b: torch.Tensor, kind: str = "l2") -> torch.Tensor:
+    """Distance ``d`` between two internal states (ISA Eq. 1 / ``L_im``).
 
-    * ``"cos"`` - cosine distance averaged over sequence positions:
-      ``mean_i (1 - cos(a_i, b_i))``. This is the default the paper reports as
-      the more reliable metric for self-attention states.
+    The paper's **default** distance is the Mean Squared Error (MSE), with cosine
+    distance as the documented alternative ("Common choices of d include Lp norm
+    and cosine distance", Sec. 4.2; "For simplicity, the default setting uses MSE
+    as the distance metric", Sec. 5.1). Cosine is reported as more reliable for
+    self-attention states (Sec. 5.2), hence it stays available.
+
     * ``"l2"`` - mean squared error ``mean((a - b) ** 2)`` (the paper's MSE
       default; a monotone function of the squared L2 norm of the difference).
+    * ``"cos"`` - cosine distance averaged over sequence positions:
+      ``mean_i (1 - cos(a_i, b_i))``.
     """
+    if kind == "l2":
+        return ((a - b) ** 2).mean()
     if kind == "cos":
         cos = F.cosine_similarity(a, b, dim=-1)  # per-position cosine
         return (1.0 - cos).mean()
-    if kind == "l2":
-        return ((a - b) ** 2).mean()
-    raise ValueError(f"unknown distance {kind!r}; use 'cos' or 'l2'")
+    raise ValueError(f"unknown distance {kind!r}; use 'l2' (MSE, default) or 'cos'")
 
 
 class RandomFeatureNet(nn.Module):
     """Fixed random Gaussian network used as a universal feature extractor.
 
     This is the ``phi`` of the ER distribution-matching penalty ``L_dm`` (ISA
-    paper Eq. 3). Weights and biases are drawn once from a Gaussian with a
-    dedicated generator and then frozen (``requires_grad_(False)``), so the
-    extractor is a fixed, data-independent random projection - exactly the
-    "random Gaussian neural network as universal feature extractor" of the
-    paper, not a learned module.
+    paper Eq. 3, following the distribution-matching idea of Zhao & Bilen [39]).
+    Weights and biases are drawn once from a Gaussian with a supplied
+    ``generator`` and then frozen (``requires_grad_(False)``), so the extractor
+    is a fixed, data-independent random projection - exactly the "random Gaussian
+    neural network as universal feature extractor" of the paper, not a learned
+    module.
+
+    EXPERIMENTAL_COMPLETION: the paper names the extractor ("random Gaussian
+    neural network") but does **not** specify its architecture (depth, width,
+    nonlinearity) or the Gaussian weight scale. We use a small MLP with
+    ``1/sqrt(fan_in)`` Gaussian weights (so the random features stay O(1) rather
+    than exploding through the stacked layers) and ReLU by default. These
+    specifics are our reproduction choice, not the paper's.
     """
 
     def __init__(
@@ -111,11 +129,16 @@ class RandomFeatureNet(nn.Module):
         d_in: int,
         hidden: int = 64,
         depth: int = 2,
-        seed: int = 0,
+        *,
+        generator: Optional[torch.Generator] = None,
+        seed: Optional[int] = None,
         nonlinearity: str = "relu",
     ) -> None:
         super().__init__()
-        gen = torch.Generator().manual_seed(int(seed))
+        if generator is None:
+            generator = torch.Generator()
+            if seed is not None:
+                generator.manual_seed(int(seed))
         dims = [int(d_in)] + [int(hidden)] * int(depth)
         self.layers = nn.ModuleList()
         for i in range(int(depth)):
@@ -127,9 +150,9 @@ class RandomFeatureNet(nn.Module):
             lin = nn.Linear(dims[i], dims[i + 1])
             with torch.no_grad():
                 lin.weight.copy_(
-                    scale * torch.randn(dims[i + 1], dims[i], generator=gen)
+                    scale * torch.randn(dims[i + 1], dims[i], generator=generator)
                 )
-                lin.bias.copy_(scale * torch.randn(dims[i + 1], generator=gen))
+                lin.bias.copy_(scale * torch.randn(dims[i + 1], generator=generator))
             self.layers.append(lin)
         self.act = nn.ReLU() if nonlinearity == "relu" else nn.Tanh()
         for p in self.parameters():
@@ -141,50 +164,68 @@ class RandomFeatureNet(nn.Module):
         return x
 
 
-def build_feature_nets(
-    d_in: int, num_nets: int, hidden: int, depth: int, seed: int
-) -> list[RandomFeatureNet]:
-    """Sample ``num_nets`` independent fixed feature extractors (approx E_{phi})."""
-    return [
-        RandomFeatureNet(d_in, hidden=hidden, depth=depth, seed=seed + 1000 * i)
-        for i in range(int(num_nets))
-    ]
-
-
 def distribution_matching_loss(
     what: torch.Tensor,
     embedding_matrix: torch.Tensor,
-    feature_nets: list[RandomFeatureNet],
     generator: torch.Generator,
+    *,
+    num_nets: int = 1,
+    hidden: int = 64,
+    depth: int = 2,
+    nonlinearity: str = "relu",
 ) -> torch.Tensor:
     r"""ER distribution-matching penalty ``L_dm`` (ISA paper Eq. 3).
 
-    ``L_dm = E_{phi ~ P_phi} || stats(phi(what)) - stats(phi(E_batch)) ||^2``
+    .. math::
+        L_{dm} = \mathbb{E}_{\phi \sim P_\phi}\;
+                 \big\| \overline{\phi}(\hat{w}) - \overline{\phi}(w_{in}) \big\|^2
 
-    where ``phi`` is a fixed random Gaussian network (:class:`RandomFeatureNet`),
-    ``E_batch`` is a batch of real token embeddings sampled from
-    ``fA.embedding_matrix()`` of the *same size* as ``what`` (one real row per
-    dummy row), and ``stats(.)`` collects the **batch mean and variance across
-    the sequence positions** - the "averaging" (overline) of the paper applied
-    to the random features. The expectation over ``P_phi`` is estimated by
-    averaging over the sampled feature networks.
+    where ``phi`` is a *random Gaussian neural network* universal feature
+    extractor (:class:`RandomFeatureNet`), the overline denotes **averaging**
+    (the batch mean over embedding rows), and ``w_in`` is a batch of real token
+    embeddings sampled from ``fA.embedding_matrix()`` of the *same size* as
+    ``what`` ("we sample random embedding batches of equal size from ``what`` and
+    ``w_in`` before averaging in each step"). The expectation over ``P_phi`` is
+    estimated by resampling ``phi`` (``num_nets`` draws per call), and the whole
+    penalty is resampled *every optimization step* because ``_run`` passes the
+    same advancing ``generator`` each step.
 
-    Matching the first two batch moments of a random non-linear feature keeps
-    ``what`` distributed like real embeddings (preventing the high-norm
-    overfitting the paper observed) without ever being a plain L2/norm penalty.
+    This is faithfully Eq. 3 and nothing more:
+
+    * **mean**-matching only - the squared difference is between the two batch
+      *means* ``phi_bar``; there is no variance / second-moment term;
+    * a **sum of squares over the feature dimension** - ``|| . ||^2`` is the
+      squared L2 norm of the mean-difference vector (``.sum()``, not ``.mean()``);
+    * ``phi`` and the real-embedding batch are **resampled** from ``generator``
+      on every call, matching "random ... in each step".
+
+    The ``what`` batch is the full set of dummy rows (``|h_l|`` of them) and we
+    draw an equal-size (one-real-row-per-dummy-row) real batch each call; this is
+    the toy-scale reading of "batches of equal size from ``what`` and ``w_in``".
+
+    Matching the batch mean of a random non-linear feature keeps ``what``
+    distributed like real embeddings (preventing the high-norm overfitting the
+    paper observed in Sec. 4.2) without ever being a plain L2/norm penalty.
     """
-    n = what.shape[0]
-    vocab = embedding_matrix.shape[0]
-    idx = torch.randint(0, vocab, (n,), generator=generator)
-    real = embedding_matrix[idx]  # (n, d), constant w.r.t. the optimization
+    n, d = int(what.shape[0]), int(what.shape[1])
+    vocab = int(embedding_matrix.shape[0])
+    num_nets = max(1, int(num_nets))
     total = what.new_zeros(())
-    for net in feature_nets:
+    for _ in range(num_nets):
+        # Resample phi first, then the equal-size real batch, both from the same
+        # advancing generator (so the test can replay the exact draws).
+        net = RandomFeatureNet(
+            d, hidden=hidden, depth=depth, generator=generator, nonlinearity=nonlinearity
+        )
+        idx = torch.randint(0, vocab, (n,), generator=generator)
+        real = embedding_matrix[idx]  # (n, d), constant w.r.t. the optimization
         fw = net(what)  # (n, hidden) - depends on what
         fr = net(real)  # (n, hidden) - constant
-        mean_w, mean_r = fw.mean(dim=0), fr.mean(dim=0)
-        var_w, var_r = fw.var(dim=0, unbiased=False), fr.var(dim=0, unbiased=False)
-        total = total + ((mean_w - mean_r) ** 2).mean() + ((var_w - var_r) ** 2).mean()
-    return total / max(1, len(feature_nets))
+        mean_w = fw.mean(dim=0)  # overline = averaging over the batch rows
+        mean_r = fr.mean(dim=0)
+        # || phi_bar(what) - phi_bar(w_in) ||^2 : squared L2 over the feature dim.
+        total = total + ((mean_w - mean_r) ** 2).sum()
+    return total / num_nets
 
 
 def recover_tokens_by_cosine(

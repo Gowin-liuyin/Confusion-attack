@@ -5,40 +5,80 @@ paper:
   title: "Depth Gives a False Sense of Privacy: LLM Internal States Inversion"
   authors: "Dong et al., USENIX Security 2025"
   id: arXiv:2507.16372
-  section: "Algorithm 1 (ER blue / TBS red), Section 5, Appendix A"
+  section: "Algorithm 1 (ER blue / TBS red), Section 5.1-5.2, Appendix A (Eq. 11)"
 attack:
+  # The runner supports a bundle of runs. ER (shallow layers) and TBS (deep
+  # layers) with the paper's optimizer/step/penalty grid. Full d_in basis for
+  # TBS (no low-rank truncation); phi_z = alpha*arctan with alpha=5/pi.
   runs:
-    - {name: isa.er, variant: original, params: {distance: cos, lr: 0.0005, steps: 50000, lambda_dm: 0.001}}
-    - {name: isa.tbs, variant: original, params: {distance: cos, lr: 0.0001, steps: 50000, r: 8}}
+    # --- ER (Algorithm 1 blue; shallow layers; zero-init dummy embeddings) ---
+    # Table 3: mu=1e-3 for layer index < 8.
+    - {name: isa.er, variant: original, params: {distance: l2, lr: 1.0e-3, steps: 50000, lambda_dm: 0.0}}
+    # Table 3: mu=1e-2 for deeper layers (e.g. L=8).
+    - {name: isa.er, variant: original, params: {distance: l2, lr: 1.0e-2, steps: 50000, lambda_dm: 0.0}}
+    # Improved setting: distribution-matching penalty on (lambda=1e-3, Eq. 3).
+    - {name: isa.er, variant: original, params: {distance: l2, lr: 5.0e-4, steps: 50000, lambda_dm: 1.0e-3}}
+    # --- TBS (Algorithm 1 red; deep layers; unbiased basis B=V, full d_in) ---
+    # Default setting: MSE, mu=5e-4, lambda=0, E=5e4, unbiased basis, alpha=5/pi.
+    - {name: isa.tbs, variant: original, params: {distance: l2, lr: 5.0e-4, steps: 50000, basis: unbiased, alpha: 1.5915494309189535, lambda_dm: 0.0}}
+    # Lower lr for deep/middle layers (Sec. 5.2: smaller lr improves deep layers).
+    - {name: isa.tbs, variant: original, params: {distance: cos, lr: 1.0e-4, steps: 50000, basis: unbiased, alpha: 1.5915494309189535, lambda_dm: 0.0}}
+    # TBS with the distribution-matching penalty (lambda=1e-3, Eq. 3).
+    - {name: isa.tbs, variant: original, params: {distance: l2, lr: 5.0e-4, steps: 50000, basis: unbiased, alpha: 1.5915494309189535, lambda_dm: 1.0e-3}}
 models:
   - Llama-3-8B-Instruct
   - Qwen2.5-7B-Instruct
-layers: {er: "shallow layers", tbs: [8, 16, 32]}
+layers:
+  llama3_32layer: [2, 4, 8, 16, 24]   # Sec. 5.2 attack settings
+  qwen2_5_28layer: [14]               # Sec. 5.2 attack settings
+  note: "ER targets shallow layers; TBS targets deep layers."
 dataset:
-  description: "top-100 longest prompts from MentalHealth / Doctor / benchmark sets (held out)"
+  description: >-
+    Top-25 longest prompts per dataset (TBS long-context evaluation set,
+    Figure 7) from the medical datasets Aimedical and Mentalhealth (MH) and the
+    coding datasets Evolcode (EC) and CodeparrotApps (CA). Short-context
+    comparison (Table 3) uses Instruction-2M.
+  tbs_eval: "top-25 longest prompts per dataset"
+  note: >-
+    Bio-Medical-Llama-3-8B (a.k.a. "Llama-3-Doctor") is a MODEL finetuned from
+    Llama-3-8B-Instruct used for the black-box replication attack, NOT a dataset.
 hyperparameters:
-  optimizer: AdamW
-  distribution_matching: "random Gaussian neural network universal features + batch statistics"
-  phi_z: "arctan scaling (paper uses alpha = 5/pi to accelerate; the (-pi/2, pi/2) bound is preserved)"
+  optimizer: AdamW                      # Sec. 5.1 ("We use the optimizer AdamW")
+  weight_decay: UNSPECIFIED             # paper states AdamW but gives no decay value
+  mu_grid: [1.0e-3, 5.0e-4, 1.0e-4]     # Sec. 5.1
+  mu_er_by_depth: {layers_lt_8: 1.0e-3, deeper_layers: 1.0e-2}  # Table 3
+  lambda_grid: [0, 1.0e-3]              # Sec. 5.1 penalty weight
+  steps: 50000                          # E = 5e4
+  distance_default: MSE                 # Sec. 5.1; COS available & more reliable for self-attn (Sec. 5.2)
+  tbs_basis_default: unbiased           # "we use unbiased basis in default" (Sec. 5.1); B=V (Algorithm 1)
+  tbs_basis_options: [unbiased, vt]     # B=V (unbiased) or B=V^T; full d_in basis (no truncation)
+  phi_z: "alpha * arctan(z . B), alpha = 5/pi to accelerate (App. A, Eq. 11); bound (-2.5, 2.5)"
+  distribution_matching: >-
+    L_dm (Eq. 3): random Gaussian neural network as universal feature extractor;
+    MEAN-matching of batch averages ||phi_bar(what) - phi_bar(w_in)||^2; phi and
+    the equal-size real-embedding batch resampled every step.
+  init: "ER dummy embeddings init 0; TBS/baseline projection init 1/d_in"
 metrics:
   report: [cosine_similarity, token_f1, exact_match]
   ks: [1]
 fidelity:
   approximations:
     sampling: false
-    truncation: false
+    truncation: false          # TBS uses the FULL d_in basis, not a top-r slice
     quantization: false
     low_precision: false
     pruning: false
     early_stopping: false
     candidate_truncation: false
     approx_nearest_neighbor: false
-formula_refs: [ISA-1, ISA-ER-IM, ISA-ER-INV, ISA-TBS-SVD, ISA-TBS-REPARAM]
+formula_refs: [ISA-1, ISA-ER-IM, ISA-ER-INV, ISA-ER-DM, ISA-TBS-SVD, ISA-TBS-BASIS, ISA-TBS-REPARAM]
 resource_requirement: >-
   Requires Llama-3-8B / Qwen2.5-7B with gradient access and ~5e4 optimisation
   steps per prompt. Infeasible on the local 8 GB GPU; here the ER state loss,
-  the random-Gaussian-feature L_dm, the TBS SVD basis and the arctan bound are
-  verified on the frozen toy model.
+  the random-Gaussian-feature L_dm, the full-d_in TBS SVD basis (unbiased B=V and
+  B=V^T) and the alpha*arctan bound are verified on the frozen toy model.
 notes: >-
   Model weights are frozen during optimisation; only the input variables are
-  updated. Token recovery is by per-row max cosine similarity (Algorithm 1 line 11).
+  updated with AdamW. Token recovery is by per-row max cosine similarity
+  (Algorithm 1 line 11). TBS optimises the full-d_in projection z (no low-rank
+  truncation) and uses the unbiased basis B=V by default.

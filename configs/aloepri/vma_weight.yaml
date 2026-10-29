@@ -5,7 +5,19 @@ paper: {title: "AloePri", id: 2603.01499v2, section: "Appendix D.1 (VMA), Table 
 attack:
   name: vma.weight_rowsort
   variant: aloepri
-  params: {}
+  params: {}                    # atol for duplicate detection / verification defaults to 1e-6
+  method: >-
+    RowSort (sort within each row) eliminates the column permutation Z2, then
+    L1 nearest-neighbor matching of the row-sorted rows recovers the row
+    permutation Z1 (paper line 1594: "first eliminate one permutation via
+    column-wise sorting, then recover the other via neighbor matching"). Z2 is
+    then recovered by nearest-neighbor matching of columns on the assigned rows.
+  identity: "RowSort(Y) = Z1 . RowSort(X)  (paper writes RowSort(Y)=RowSort(XZ2); exact only up to the row order Z1)"
+  vma_distance:
+    specified_by_paper: false   # AloePri does not name the row/column matching distance
+    used: L1
+    status: EXPERIMENTAL_COMPLETION
+    source: "Thomas et al. 2025 (VMA uses L1)"
 defense:
   weight_combinations:          # Table 9: known X / observed Y pairs exhibiting Y = Z1 X Z2 structure
     - {known: "We Wh",            observed: "Pi W*embed Wh Pi^T"}
@@ -14,9 +26,11 @@ defense:
     - {known: "We Wup",           observed: "Pi W*embed Wup Sffn Zffn"}
     - {known: "Wdown Wh",         observed: "Zffn^-1 Sffn^-1 Wdown W*head Pi^T"}
     - {known: "We Wrouter",       observed: "Pi W*embed norm(Wrouter) Zrouter"}
-  multi_layer_voting: true       # VMA results of all decoder layers are combined by voting
+  multi_layer_voting: true       # per-row MAJORITY VOTE across decoder layers (paper lines 1597-1599);
+                                 # not a concatenated fingerprint. Table-9 matrices may differ in shape per layer.
+  noise_model: "W*embed = We + alpha_e . Eembed, W*head = Wh + alpha_h . Ehead (paper lines 473-475)"
   privacy: {lambda: 0.3, expansion_h: 128, alpha_e: 1.0, alpha_h: 0.2, beta: 8, gamma: 1.0e-3}
-  note_alpha_e: "At alpha_e=0.5 the paper reports VMA recovers >30% tokens (weights differ almost only by permutations)."
+  note_alpha_e: "At alpha_e=0.5 the paper reports VMA recovers >30% tokens (weights differ almost only by permutations); recommended alpha_e=1.0, alpha_h=0.2 (lines 868-872)."
 models: [Qwen2.5-14B-Instruct, R1-Distill-14B, R1-Distill-32B, Qwen3-14B, Qwen3-32B, Llama3-8B, Qwen3-MoE-30B-A3B, DS-V3.1-Terminus-671B]
 dataset: {description: "PUPA dataset; TTRSR / PIIRSR / BLEU-4"}
 metrics: {report: [ttrsr, piirsr, bleu4], ks: [1, 5, 10]}
@@ -24,4 +38,13 @@ fidelity:
   approximations: {sampling: false, truncation: false, quantization: false, low_precision: false, pruning: false, early_stopping: false, candidate_truncation: false, approx_nearest_neighbor: false}
 formula_refs: [VMA-B2-1, VMA-B2-2, METRIC-TTRSR]
 resource_requirement: "Requires AloePri-obfuscated weight matrices of 14B-671B models across decoder layers. Not available locally."
-notes: "RowSort recovers Z1 then Z2; duplicate rows are disambiguated by verification and multi-decoder-layer voting (verified exactly on synthetic Y=Z1 X Z2)."
+notes: >-
+  RowSort + L1 nearest-neighbor matching recovers Z1 (noise-tolerant at
+  alpha_e=1.0, unlike exact fingerprinting), then Z2 by column neighbor
+  matching. Per-layer results are combined by a per-row majority vote across
+  layers. Unique rows are assigned first and Z2 recovered from them; each
+  duplicate fingerprint group is resolved individually, and any group that stays
+  ambiguous is reported as a PARTIAL result (diagnostics.partial=true with
+  candidate sets) - never a fake verified and never a wrong Z1 claimed verified.
+  Verified exactly on synthetic Y=Z1 X Z2 (clean, noisy, multi-layer voting with
+  differing shapes, and duplicate-row partials).

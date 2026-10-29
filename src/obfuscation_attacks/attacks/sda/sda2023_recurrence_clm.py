@@ -347,11 +347,14 @@ class SDA2023(Attack):
                     "tgt": float(l_tgt.detach()),
                 }
 
-        recovered = self._decode(model, cfg, cipher_rec, beam_width=int(p.get("beam_width", 5)))
+        recovered, mapping = self._decode(
+            model, cfg, cipher, cipher_rec, beam_width=int(p.get("beam_width", 5))
+        )
         return AttackResult(
             recovered_token_ids=np.asarray(recovered, dtype=int),
             candidates=[[int(t)] for t in recovered],
             recovered_text=" ".join(str(int(t)) for t in recovered),
+            recovered_mapping={int(c): int(v) for c, v in mapping.items()},
             diagnostics={
                 "method": "causal_lm_recurrence_2023",
                 "objective": "L_CLM = -log P(X) - log P(Y|X)",
@@ -365,6 +368,7 @@ class SDA2023(Attack):
                 "final_train_loss_src": final["src"],
                 "final_train_loss_tgt": final["tgt"],
                 "cipher_len": int(cipher.size),
+                "structural_consistency": "majority-vote key (equal cipher symbol -> equal plaintext)",
             },
         )
 
@@ -373,10 +377,11 @@ class SDA2023(Attack):
         self,
         model: CausalCipherLM,
         cfg: CausalLMConfig,
+        cipher: np.ndarray,
         cipher_rec: Sequence[int],
         *,
         beam_width: int,
-    ) -> list[int]:
+    ) -> tuple[list[int], dict[int, int]]:
         model.eval()
         n = len(cipher_rec)
         prompt_ids = [cfg.rec_tag] + [cfg.rec_id(int(k)) for k in cipher_rec] + [cfg.plain_tag]
@@ -393,7 +398,12 @@ class SDA2023(Attack):
         tokens, _, _ = length_matched_beam_search(
             step, num_steps=n, beam_width=beam_width, allowed_ids=allowed
         )
-        return tokens
+        # Recover a deterministic cipher->plain key by majority vote. A homophonic
+        # cipher maps many cipher symbols to one plaintext, so grouping by the
+        # ORIGINAL cipher symbol keeps the map deterministic and makes equal
+        # cipher symbols decode to equal plaintext (structural consistency).
+        consistent, mapping = enc.enforce_substitution_consistency(cipher, tokens)
+        return consistent, mapping
 
 
 __all__ = [

@@ -3,9 +3,11 @@ mode: smoke
 seed: 0
 attack:
   name: sda.sda2021
-  params: {epochs: 15, num_train: 256, beam_width: 5}
+  # SMOKE-only tiny sizes for a fast CPU run; paper scale (beam 100, 2M train,
+  # 16-256 lengths, 14 languages, ~44M params) lives in configs/original/sda2021.yaml.
+  params: {epochs: 15, num_train: 256, beam_width: 5}  # SMOKE-only (not paper scale)
 scenario:
   name: sda
   params: {num_corpus: 120, eval_words: 3}
 metrics: {ks: [1, 5, 10]}
-notes: Frequency-rank + seq2seq decipherment smoke test (original SDA 2021).
+notes: Frequency-rank (INJECTIVE, distinct codes per symbol) + seq2seq decipherment smoke test (original SDA 2021). SMOKE-only sizes.

@@ -5,40 +5,92 @@ paper:
   title: "Can Sequence-to-Sequence Models Crack Substitution Ciphers?"
   authors: "Aldarrab & May, ACL 2021"
   id: 2021.acl-long.561
-  section: "Section 3 (decipherment as seq2seq), frequency-rank encoding"
+  section: "Sec 3 (decipherment as seq2seq), Sec 3.2/Fig 5 frequency encoding, Sec 5 experiments"
 attack:
   name: sda.sda2021
   variant: original_2021
-  params: {epochs: 20, beam_width: 100, num_train: 100000}
+  # Paper scale (Sec 4/5.1): beam size 100; 2M train / 3K tune / 50 test ciphers;
+  # 20 epochs. min_len/max_len span the paper's 16..256 length sweep.
+  params:
+    epochs: 20
+    beam_width: 100
+    num_train: 2000000
+    num_tune: 3000
+    num_test: 50
+    min_len: 16
+    max_len: 256
 cipher_type: "1:1 substitution"
-languages: 14                 # multilingual decipherment
+languages: 14                 # multilingual decipherment, no language-ID step
+encoding: frequency_rank      # INJECTIVE frequency rank (rank 1 = most frequent), NOT recurrence
 dataset:
-  source: "public plaintext enciphered with random 1:1 keys; Borg cipher (first 256 chars) as real test"
-conditions:
-  - "different cipher lengths"
-  - "no-space ciphers"
-  - "ciphers with noise"
+  source: "English Gigaword + 13 Project-Gutenberg languages; public plaintext enciphered with random 1:1 keys"
+  real_test: "Borg cipher (first 256 characters), Latin plaintext"
+  lengths: [16, 32, 64, 128, 256]
+  train_tune_test: {train: 2000000, tune: 3000, test_per_length: 50}
+# The paper's four experiment conditions (Sec 5.1-5.4). Implemented as pure
+# condition generators in encodings.py (crop_to_length / handle_spaces /
+# apply_transcription_noise) and exercised in tests/unit/test_sda.py (SER/TER)
+# and tests/regression/test_sda_regression.py (end-to-end length condition).
+experiments:
+  cipher_length:
+    section: "5.1"
+    lengths: [16, 32, 64, 128, 256]
+    note: "shorter ciphers are harder; 256 reaches perfect decipherment in the paper"
+  space_handling:
+    section: "5.2"
+    scenarios:
+      - "spaces kept (comparable to Kambhatla et al. 2018)"
+      - "enciphered spaces (space frequency-encoded like any other symbol) - SER"
+      - "no-space ciphers (space removed from both sides) - SER"
+      - "no-space source, spaces restored on target - length changes, scored with TER"
+    metric_note: "length-changing scenarios use character-level TER (Snover et al. 2006)"
+  unknown_language:
+    section: "5.3"
+    note: "single multilingual model over 14 languages, no explicit language ID"
+  transcription_noise:
+    section: "5.4"
+    kinds: [substitution, insertion, deletion]
+    train_noise: 0.10          # models trained with 10% noise are most robust
+    eval_noise_sweep: [0.05, 0.10, 0.15, 0.20, 0.25]
+    metric_note: "substitution preserves length (SER); insertion/deletion change length (TER)"
 hyperparameters:
-  encoding: frequency_rank
-  model: "Transformer encoder-decoder"
-  objective: "L_Seq2Seq = -log P(Y|X)"
-  decode: beam_search
+  model: "Transformer encoder-decoder, 6 encoder + 6 decoder layers, ~44M params (Gao et al. 2020 char-NMT settings)"
+  objective: "L_Seq2Seq = -log P(Y|X)  (target-side cross-entropy only; NO source term)"
+  decode: "beam search, beam=100, output length forced to match the source length"
+  batch_max_tokens: 10000      # paper: max batch 10K tokens, half precision
+  epochs: 20
+  train_hardware: "Tesla V100, ~110 min/epoch; ~400 char-tokens/s decode"
 metrics:
-  report: [symbol_error_rate, decode_accuracy]
-  ks: [1]
+  report: [symbol_error_rate, decode_accuracy]   # decode_accuracy = 1 - SER
+  space_restoration: [ter]                        # character-level TER for length-changing spaces/noise
+  ks: [1]                                         # single-hypothesis decode (ASR@k == ASR@1)
+unspecified:
+  # Paper-silent values (follows Gao et al. 2020 but does not restate them).
+  - d_model
+  - nhead
+  - dim_ff
+  - dropout
+  - learning_rate
+  - warmup_schedule
+  - optimizer_betas
 fidelity:
   approximations:
     sampling: false
     truncation: false
     quantization: false
-    low_precision: false
+    low_precision: false       # our reproduction introduces none; the paper's own fp16 training is a PAPER hyperparameter (see hyperparameters.batch_max_tokens / train_hardware), not an approximation added here
     pruning: false
     early_stopping: false
     candidate_truncation: false
     approx_nearest_neighbor: false
 formula_refs: [SDA-2021-ENC, SDA-2021-OBJ]
 resource_requirement: >-
-  Paper-scale training needs ~1e5 synthesised cipher/plaintext pairs across 14
-  languages with beam width 100. The method is implemented and verified on a
-  small synthetic language; full multilingual training is not run here.
-notes: Frequency-rank encoding is kept strictly distinct from the 2023 recurrence encoding.
+  resource_blocked (data-only). Paper-scale training needs ~2M synthesised
+  cipher/plaintext pairs across 14 languages with beam width 100 (~110 min/epoch
+  on a V100, 20 epochs). The method - INJECTIVE frequency-rank encoding, the
+  -log P(Y|X) objective, beam search, and the four experiment conditions - is
+  implemented and verified on a small synthetic language; full multilingual
+  training is not run here.
+notes: >-
+  Frequency-rank encoding is INJECTIVE (distinct symbols -> distinct codes,
+  Fig 5) and kept strictly distinct from the 2023 recurrence encoding.

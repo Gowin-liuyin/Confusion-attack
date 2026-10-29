@@ -52,6 +52,13 @@ def test_encoding_exactness():
     assert frequency_rank_encode(clear) == [2, 2, 1, 1, 1, 3]
     assert recurrence_encode(clear) != frequency_rank_encode(clear)
 
+    # SDA-2021-ENC is INJECTIVE on symbols even when counts tie (Fig 5 gives
+    # distinct codes to distinct symbols): 'ab' and 'aa' must NOT collapse, and
+    # two equally-frequent symbols (4 and 7) get DISTINCT dense codes.
+    assert frequency_rank_encode([0, 1]) != frequency_rank_encode([0, 0])
+    tie = frequency_rank_encode([4, 4, 7, 7, 9])  # 4 and 7 both count 2
+    assert tie == [1, 1, 2, 2, 3] and len(set(tie)) == 3
+
 
 # ---------------------------------------------------------------------------
 # (b) 2023 two-term CLM decomposition

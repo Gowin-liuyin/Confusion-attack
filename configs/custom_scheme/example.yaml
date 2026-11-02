@@ -1,0 +1,28 @@
+# Example of plugging a CUSTOM obfuscation scheme into the attack harness
+# (Goal section 9). This is a demonstration only and is NOT part of the paper
+# reproduction results.
+#
+# The scheme `CustomNullSpaceScheme` (src/obfuscation_attacks/schemes/custom_example.py)
+# perturbs token embeddings and exposes ONLY the perturbed embeddings
+# (capability EMBEDDINGS). Run it with:
+#
+#   python scripts/run_experiment.py --config configs/custom_scheme/example.yaml
+#
+# Because the scheme withholds weights/hidden-states/ciphertext, an attack that
+# needs those capabilities (e.g. vma.weight_rowsort) is reported `not_applicable`
+# rather than being fed the defender's secret or scored as 0% success. Increase
+# `epsilon` to watch the geometric-attack success degrade - the defender's knob.
+name: custom_scheme_example
+mode: smoke
+seed: 0
+attack:
+  name: nn_knn.euclidean
+  params: {top_k: 10}
+scenario:
+  name: custom_nullspace
+  params: {vocab: 50, d: 16, n: 15, epsilon: 0.1}
+metrics: {ks: [1, 5, 10]}
+notes: >-
+  Custom-scheme interface demo. The attacker uses only the perturbed embeddings
+  the scheme exposes. Swap `attack.name` to vma.weight_rowsort to observe an
+  honest not_applicable, and raise `epsilon` to reduce leakage.

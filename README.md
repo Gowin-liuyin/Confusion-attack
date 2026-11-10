@@ -52,7 +52,7 @@ python scripts/audit_placeholders.py
 
 1. 先按协议锁定威胁模型、模型 revision、输入切分、对照组和预算。
 2. 在本地准备匹配的原始模型、A+B 交付工件和有权使用的公开语料。用 `scripts/build_paper_manifest.py --help` 查看如何生成本地身份清单；模型、数据、凭据、机器专用清单与运行产物都不入库。
-3. 用 `scripts/run_full_battery.py --profile paper-v1 --plan-only --help` 查看正式计划参数，再带本地清单和相应资源生成计划。正式执行和小预算 `probe` 分开存档。
+3. 用 `scripts/run_full_battery.py --help` 查看正式计划参数，再带本地清单和相应资源生成计划。正式执行和小预算 `probe` 分开存档。
 4. 归档生效配置、代码版本、结果与阻塞原因。新方案可参考 `src/obfuscation_attacks/schemes/custom_example.py` 与 `configs/custom_scheme/example.yaml`，并在观测上下文中明确评测可见的数据。
 
 ## 目录结构
@@ -81,3 +81,8 @@ blocked. Implementation deviations are in [DEVIATIONS.md](docs/DEVIATIONS.md); e
 is defined only by [PAPER_EVALUATION_PROTOCOL.md](docs/PAPER_EVALUATION_PROTOCOL.md).
 
 A 和 B 的独立组件见 [AloePri-final](https://github.com/Gowin-liuyin/AloePri-final) 和 [OSNIP-final](https://github.com/Gowin-liuyin/OSNIP-final)。
+
+## 更多文档
+
+- [运行与结果检查](docs/RUNBOOK.md)
+- [维护与贡献](CONTRIBUTING.md)

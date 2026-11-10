@@ -9,7 +9,6 @@
 1. [AGENTS.md](AGENTS.md)：仓库约定和维护边界。
 2. **[PAPER_EVALUATION_PROTOCOL.md](docs/PAPER_EVALUATION_PROTOCOL.md)**：唯一实验权威，定义安全模型、对照组、隐私/效用/效率、预算和验收。正式配置以其中第 8 节冻结要求为准。
 3. [PRIVACY_IMPLEMENTATION_PLAN.md](docs/PRIVACY_IMPLEMENTATION_PLAN.md)：代码审计发现、F 编号和 W0–W7 施工依赖；只管理实施，不定义标准。
-4. [PRIVACY_AGENT_PROMPTS.md](docs/PRIVACY_AGENT_PROMPTS.md)：总控与分阶段执行提示词，按当前阶段使用。
 5. 当前任务对应的代码、测试、运行 manifest 和逐条结果。先复核事实，再接续修改。
 
 `docs/archive/`、外部包中的旧计划、`reports/` 内的旧汇报仅作历史证据。文件名含“最新”“定稿”“full”或结果有 `main_table_eligible=true`，都不能覆盖现行协议。若用户明确改变实验要求，先更新唯一协议及理由，再同步配置、代码和验收；不要新建平行规范。
@@ -35,7 +34,7 @@
 
 1. 检查 `git status --short` 和相关 diff，识别既有未提交工作，禁止 reset、覆盖别人的修改或清空旧结果。
 2. 阅读上述文档，找到当前阶段的实际实现与验收证据。不要把计划中的“应该存在”当成已实现。
-3. 如在接续审计，先看 [审计快照](reports/code_audit_20261107/audit_manifest.json) 与 [缺陷复现记录](reports/code_audit_20261107/observations.json)，比对当前源码。审计日期、测试数量和行号只是当时快照，不代表最新状态。
+3. 如在接续审计，先看 `reports/code_audit_20261107/audit_manifest.json` 与 `reports/code_audit_20261107/observations.json`，比对当前源码。审计日期、测试数量和行号只是当时快照，不代表最新状态。
 4. 明确本次修改范围、调用方、共享文件、待补测试和验收方法。复验实际缺陷；逻辑、隔离和计分修复应有修复前能失败、修复后通过的调用链测试。
 5. 在已经授权的范围内完成实现和验证，不停留在建议；可逆的本地修改与小型验证不反复索要确认。用户只要求审核/计划时不擅自扩大为全面修复或正式训练。
 

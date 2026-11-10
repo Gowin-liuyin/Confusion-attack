@@ -4,7 +4,7 @@
 
 唯一实验标准是 [PAPER_EVALUATION_PROTOCOL.md](PAPER_EVALUATION_PROTOCOL.md)，正式预算和对照组执行其第 8 节。本文只记录当前代码缺口、改动位置、执行依赖和验收证据。参数改变只能修订权威协议。本计划允许维护自身完成状态，不另立攻击强度或安全模型。
 
-配套交接：[分阶段 agent 提示词](PRIVACY_AGENT_PROMPTS.md)。所有路径相对仓库根目录。
+所有路径相对仓库根目录。文中列出的历史审计产物仅留存在原实验目录，不随源码发布。当前运行入口见 [运行手册](RUNBOOK.md)。
 
 ## 1. 审核结论与范围
 
@@ -12,8 +12,8 @@
 
 - 本次审核覆盖 `schemes/ab_deployment.py`、`evaluation/real_*.py`、`attack_model.py`、数据划分、运行脚本、结果审计及相应测试；算法模块按其实际调用关系核查，未对所有论文做从零独立数学证明。
 - 现有全套测试实跑：`python -m pytest -q`，**205 passed，79.29s**。通过不代表已覆盖下述缺陷。
-- 新增只读复现脚本：[reproduce_findings.py](../reports/code_audit_20261107/reproduce_findings.py)，实跑确认 **10 个探针观测**（其中若干属于同一缺陷），输出 [observations.json](../reports/code_audit_20261107/observations.json)。不加载完整模型、不修改算法和既有实验结果。
-- [audit_manifest.json](../reports/code_audit_20261107/audit_manifest.json) 保存当时 Git HEAD、163 个代码/配置/测试文件哈希及测试结果。后续 agent 必须先检查源码是否已有变化，复验发现，不能盲按旧行号改。
+- 新增只读复现脚本：`reports/code_audit_20261107/reproduce_findings.py`，实跑确认 **10 个探针观测**（其中若干属于同一缺陷），输出 `reports/code_audit_20261107/observations.json`。不加载完整模型、不修改算法和既有实验结果。
+- `reports/code_audit_20261107/audit_manifest.json` 保存当时 Git HEAD、163 个代码/配置/测试文件哈希及测试结果。后续 agent 必须先检查源码是否已有变化，复验发现，不能盲按旧行号改。
 - 此次未修复生产代码，未重新训练防御/攻击，未执行完整正式评测或正式外部基线复现。不能承诺“无懈可击/完美”；交付目标是权限可审计、实验可复现、实现与算法一致、每项规范有可执行验收，残余限制显式报告。
 
 ## 2. 已确认问题与风险排序
@@ -201,7 +201,7 @@ W3/W4/W5可在公共接口稳定后分工，但当前 `real_battery.py` 与CLI�
 ## 6. 第 4 轮进度（2026-11-07，W7 真实执行）
 
 本轮把 C01 从正式 CLI 接到真实执行器，并纠正底座血缘判断。证据记录在
-[reports/privacy_rebuild_20261107/round4/](../reports/privacy_rebuild_20261107/round4/)。
+`reports/privacy_rebuild_20261107/round4/`。
 
 - **正式 executor**：新增 `src/obfuscation_attacks/evaluation/paper_executor.py`。
   逐格再次校验 manifest 与真实文件（模型 config/tokenizer/weights、工件全部文件、
@@ -230,7 +230,7 @@ W3/W4/W5可在公共接口稳定后分工，但当前 `real_battery.py` 与CLI�
   1000 texts × 1 key，全词表 top-100）与 200×5 fresh-key 稳健性一格已通过正式 CLI
   真实执行；独立审计重算逐条 Top-k、重哈希模型/工件/语料、从查询重跑 KNN、按密钥
   重算上传观测、递归复核正控，结果见
-  [round4_report.md](../reports/privacy_rebuild_20261107/round4/round4_report.md)。
+  `reports/privacy_rebuild_20261107/round4/round4_report.md`。
   EDNN 子实验未跑，不能称 C01 全组完成。
 - **统一方案适配层**：新增 `schemes/adapters.py`、`evaluation/generic_runner.py`、
   `evaluation/classification.py`。八臂各有可执行契约；本地三臂 adapter-ready，

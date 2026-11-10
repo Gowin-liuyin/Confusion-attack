@@ -11,7 +11,7 @@
 - 半诚实服务器可使用协议规定的所有合法可见信息和公开信息；真实密钥、置换、未上传明文和真值标签只进隔离的生成/打分端。用同一冻结协议和工件评测隐私、效用与成本。
 - 结果和进度写入 reports/ 中对应运行的结构化产物；不要重建一份带政策判断的状态文档。保留已有结果，修正时追加来源与适用性说明。
 - 文档规则与代码/配置不一致时，记录差异并按协议修正、复核；不能仅改文档或 JSON 标签就宣称实验已达标。
-- 代码改造与审计交接见 [PRIVACY_IMPLEMENTATION_PLAN.md](docs/PRIVACY_IMPLEMENTATION_PLAN.md) 和 [PRIVACY_AGENT_PROMPTS.md](docs/PRIVACY_AGENT_PROMPTS.md)。它们仅管理施工任务与缺陷，不定义实验门槛；预算、对照组和权限仍只读唯一协议。
+- 代码改造与审计交接见 [PRIVACY_IMPLEMENTATION_PLAN.md](docs/PRIVACY_IMPLEMENTATION_PLAN.md)。它仅记录实施任务与缺陷，不定义实验门槛；预算、对照组和权限仍只读唯一协议。
 
 ## 维护边界
 

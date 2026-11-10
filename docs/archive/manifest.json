@@ -1,0 +1,34 @@
+[
+  {
+    "file": "ATTACK_STATUS_14.md",
+    "original_sha256": "29865a49001ed88a989f433b3de7ff8b5a9d53ddb9afb4d9602301083b199d77"
+  },
+  {
+    "file": "ATTACK_ORCHESTRATION_14.md",
+    "original_sha256": "e5e631a05061f14f7882a4dd50133d42d2f8331355f3a72b02b185680ddbb4d0"
+  },
+  {
+    "file": "ATTACK_ALIGNMENT_AUDIT_20261106.md",
+    "original_sha256": "47c1bc78bb010d1c20b249baf33ce3211324cf28824bf543cd4f6b08112d042d"
+  },
+  {
+    "file": "THREAT_MODEL_CORRECTION_20261107.md",
+    "original_sha256": "b9e29ebb0dade1695d3a940609f8dc0b48383cb6b4b39b9df47b9a6b4ea6ee80"
+  },
+  {
+    "file": "THREAT_MODEL_ALIGNED_WITH_PAPER_20261107.md",
+    "original_sha256": "807b78b029cdb115b5830982fcae808ba97627d78286abb63350e82ff0c39e7a"
+  },
+  {
+    "file": "CLOSED_LOOP.md",
+    "original_sha256": "883d0ec570e59afc363b3df4d251381be5586ea012a06dfe0a9a5c403096b725"
+  },
+  {
+    "file": "RESOURCE_REQUIREMENTS.md",
+    "original_sha256": "50a542673d989c5ce16cfb800f11427e1d29d0ef194fb00f329d9269210f4a23"
+  },
+  {
+    "file": "PROVENANCE_VERIFIED_20261106.md",
+    "original_sha256": "98475cb96ccfa6f8af46bd8c5bf2cf9e9cb2427b8b4653b50877899c6546cc07"
+  }
+]

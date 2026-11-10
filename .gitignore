@@ -28,6 +28,42 @@ reports/runs/
 models_cache/
 data_cache/
 
+# Client/deployment secrets (root keys). Never commit; only commitments go in results.
+.secrets/
+artifacts/llama_1b_secure_a_20261109/
+
 # OS
 .DS_Store
 Thumbs.db
+
+# Local credentials and model artifacts
+.env
+.env.*
+!.env.example
+.secrets/
+credentials/
+*.key
+*.pem
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.ckpt
+*.onnx
+*.zip
+*.tar.gz
+*.egg-info/
+build/
+dist/
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+._*
+.DS_Store
+Thumbs.db
+
+/reports/
+/artifacts/
+/runs/
+/configs/paper/manifest.paper-v1*.json

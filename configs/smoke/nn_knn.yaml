@@ -1,0 +1,13 @@
+name: smoke_nn_knn
+mode: smoke
+seed: 0
+attack:
+  name: nn_knn.euclidean
+  params: {top_k: 10}
+scenario:
+  name: nn
+  params: {vocab: 40, d: 12, n: 8, noise: 0.02}
+metrics: {ks: [1, 5, 10]}
+notes: >-
+  Synthetic smoke test for Euclidean KNN. NOT a paper reproduction; it only
+  exercises the retrieval + scoring path end to end.

@@ -1,0 +1,20 @@
+# Engineering smoke probe only; not a formal experiment or strength claim.
+profile: probe
+attack:
+  name: sda.sda2023
+  variant: recurrence_lookup_variant
+  params:
+    num_train: 128
+    epochs: 2
+    beam_width: 10
+    min_len: 4
+    max_len: 32
+    max_cipher_len: 256
+    batch_size: 32
+    d_model: 48
+    nhead: 4
+    num_layers: 2
+    dim_ff: 96
+    dropout: 0.0
+    lr: 0.0005
+    representation: lookup

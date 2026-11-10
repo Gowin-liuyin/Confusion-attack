@@ -1,0 +1,282 @@
+{
+  "role": "execution_carrier",
+  "normative": false,
+  "authority": "docs/PAPER_EVALUATION_PROTOCOL.md",
+  "profile": "paper-v1",
+  "protocol_sha256": "79a0121ff475efcec587fc3ae57452568a48e6cc1a29a09cb73ce56a32b67aaf",
+  "floors": {
+    "training_seeds": [
+      17,
+      29,
+      43
+    ],
+    "split_seed": 20261107,
+    "root_key_bits": 256,
+    "bootstrap_replicates": 2000,
+    "arms": [
+      "plaintext",
+      "aloepri",
+      "osnip",
+      "ab",
+      "sentinellms",
+      "obfuslm_plus",
+      "inferdpt",
+      "dp_forward"
+    ],
+    "models": {
+      "primary": {
+        "name": "Llama-3.2-1B",
+        "variant": "base",
+        "id": "llama-3.2-1b-base"
+      },
+      "scale": {
+        "name": "Llama-3.2-3B-Instruct",
+        "variant": "instruct",
+        "id": "llama-3.2-3b-instruct"
+      },
+      "cross_family": {
+        "name": "Qwen2.5-7B-Instruct",
+        "variant": "instruct",
+        "id": "qwen2.5-7b-instruct"
+      }
+    },
+    "knn": {
+      "main_texts": 1000,
+      "main_keys": 1,
+      "robust_texts": 200,
+      "robust_keys": 5,
+      "char_min": 20,
+      "char_max": 512,
+      "top_k": 100,
+      "metrics": [
+        "l2",
+        "cosine"
+      ]
+    },
+    "vma_h": {
+      "prompts": 200,
+      "keys": 5,
+      "layers_1b": [
+        1,
+        5,
+        10,
+        15
+      ],
+      "prefix": "recovered"
+    },
+    "isa": {
+      "prompts": 200,
+      "keys": 5,
+      "steps": 50000,
+      "checkpoints": [
+        1000,
+        10000,
+        25000,
+        50000
+      ],
+      "extension_steps": [
+        100000,
+        200000
+      ],
+      "restarts": 3,
+      "lr_grid": [
+        0.0001,
+        0.0005,
+        0.001,
+        0.01
+      ],
+      "lambda_dm": [
+        0,
+        0.001
+      ],
+      "val_prompts": 40,
+      "length_strata": {
+        "32-64": 50,
+        "65-128": 50,
+        "129-256": 50,
+        "257-512": 50
+      },
+      "optimizer": "AdamW",
+      "weight_decay": 0,
+      "loss": "MSE",
+      "tbs_alpha": 1.5915494309189535,
+      "tbs_basis": "full"
+    },
+    "weight": {
+      "min_types": 1000,
+      "noise_tiers": [
+        [
+          0,
+          0
+        ],
+        [
+          0.2,
+          0.01
+        ],
+        [
+          1.0,
+          0.2
+        ]
+      ]
+    },
+    "ima": {
+      "train_docs": 8192,
+      "min_train_tokens": 1000000,
+      "val_docs": 1024,
+      "test_docs": 1000,
+      "expansion_docs": [
+        16384,
+        32768
+      ],
+      "ridge_lambda": [
+        0.01,
+        0.1,
+        1,
+        10
+      ],
+      "epochs": [
+        10,
+        20,
+        40
+      ],
+      "epoch_extension": 80,
+      "lr": [
+        2e-05,
+        0.0001,
+        0.0003
+      ],
+      "batch": 64
+    },
+    "stream": {
+      "n_streams": 3,
+      "requests": 5000,
+      "min_tokens": 100000,
+      "min_types": 1000,
+      "key_pool": [
+        4,
+        16,
+        64
+      ],
+      "rotate_every": [
+        1,
+        16,
+        64,
+        256
+      ]
+    },
+    "linkage": {
+      "min_positives": 10000,
+      "min_negatives": 100000,
+      "fpr": [
+        0.01,
+        0.001
+      ]
+    },
+    "aggregation_m": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "tfma": {
+      "reference_tokens": 10000000,
+      "min_types": 50000,
+      "curve": [
+        4450000,
+        10000000,
+        20000000
+      ],
+      "top_k_distinct": 100,
+      "control_top1": 0.9
+    },
+    "sda": {
+      "train_sequences": 60000,
+      "val_sequences": 2000,
+      "length": 128,
+      "beam": [
+        10,
+        50,
+        100
+      ],
+      "epochs": [
+        6,
+        12,
+        24
+      ]
+    },
+    "text": {
+      "val": 200,
+      "test": 1000,
+      "bayes_epochs": [3, 10],
+      "bayes_beam": [10, 50, 100],
+      "lm_max_new_tokens": 512,
+      "lm_model": {
+        "id": "qwen2.5-7b-instruct"
+      },
+      "decoding": "greedy"
+    },
+    "output": {
+      "prompts": 1000,
+      "max_new_tokens": 256,
+      "decoding": "greedy",
+      "entities_per_type": 100,
+      "entity_types": [
+        "name",
+        "email",
+        "phone",
+        "address",
+        "id"
+      ]
+    },
+    "utility": {
+      "classification_tasks": ["mmlu", "arc_easy", "hellaswag", "piqa", "mnli", "sst2", "anli_r1", "anli_r2", "anli_r3", "wic", "qnli"],
+      "cross_family_classification_tasks": ["mmlu", "arc_easy", "hellaswag", "piqa", "sst2", "qnli"],
+      "generation_tasks": ["wikitext2_ppl", "cnn_dailymail_summary"],
+      "ppl_window": 512,
+      "ppl_stride": 256,
+      "summary_docs": 1000,
+      "summary_max_input_tokens": 1024,
+      "summary_max_new_tokens": 256,
+      "shots": 0
+    },
+    "efficiency": {
+      "input_lengths": [
+        128,
+        512,
+        1024
+      ],
+      "output_length": 128,
+      "concurrency": [
+        1,
+        4,
+        16
+      ],
+      "warmup": 20,
+      "scored_requests": 200,
+      "rounds": 3
+    },
+    "baseline_grids": {
+      "epsilon": [
+        1,
+        3,
+        8
+      ],
+      "obfuslm_k": [
+        5,
+        10,
+        20
+      ],
+      "obfuslm_epsilon": [
+        0.1,
+        1,
+        3
+      ],
+      "sentinel_glide": [
+        1,
+        5,
+        10
+      ]
+    }
+  }
+}
